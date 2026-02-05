@@ -33,7 +33,7 @@ export default function Reader({ slug }: ReaderProps) {
     fetchBookContent(slug)
       .then(setContent)
       .catch((e) =>
-        setError(e instanceof Error ? e.message : "책을 불러올 수 없습니다")
+        setError(e instanceof Error ? e.message : "책을 불러올 수 없습니다"),
       )
       .finally(() => setLoading(false));
   }, [slug, router]);
@@ -102,7 +102,7 @@ export default function Reader({ slug }: ReaderProps) {
       <button
         type="button"
         onClick={scrollToTop}
-        className="fixed bottom-6 right-6 z-20 flex size-12 items-center justify-center rounded-full bg-zinc-800 text-white shadow-lg transition hover:bg-zinc-700 active:scale-95 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-100"
+        className="fixed bottom-4 right-6 z-20 flex size-12 items-center justify-center rounded-full bg-zinc-800 text-white shadow-lg transition hover:bg-zinc-700 active:scale-95 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-zinc-100"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
         aria-label="맨 위로"
       >
