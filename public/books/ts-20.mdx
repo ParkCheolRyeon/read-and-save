@@ -895,3 +895,41 @@ interface vs type
 - project references
 
 이렇게 가면 꽤 강한 3년차~미들 초입 면접 세트가 된다.
+
+## 보완내용
+
+### 왜 보완이 필요한가
+
+기존 20문항은 `unknown`, 타입 가드, `Zod`, 런타임 검증, 모노레포 타입 공유까지 포함하고 있어서 TS 실무 면접 세트로 상당히 강하다. 다만 최근 TypeScript 실무에서는 타입 문법 자체보다도 “어떻게 안전한 시스템으로 운영하느냐”가 더 큰 차이를 만든다.
+
+특히 `satisfies`, 조건부 타입, TSConfig 안전 옵션, 단언 계열 문법은 실제 팀 코드 품질에 직접 영향을 준다. 아래 질문을 추가하면 타입 문법 사용자와 타입 시스템 설계자를 더 잘 구분할 수 있다.
+
+### 추가하면 좋은 질문
+
+#### 1. `satisfies`가 왜 필요한지 설명해보세요. 타입 annotation이나 assertion과는 어떤 차이가 있나요?
+
+이 질문은 최근 TS를 제대로 쓰는지 확인하기 좋다. 객체 리터럴의 형태 검사는 유지하면서도 리터럴 정보는 보존하고 싶은 상황을 설명할 수 있으면 실무 감각이 좋다.
+
+#### 2. 조건부 타입(conditional types)과 `infer`를 어디까지 써봤는지 설명해보세요.
+
+미들 이상 분별력이 높은 질문이다. 공용 훅, API 응답 타입 추론, 컴포넌트 prop derivation 같은 실무 사례를 들 수 있으면 타입 시스템을 조합해본 경험이 드러난다.
+
+#### 3. `strictNullChecks`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` 같은 TSConfig 옵션을 왜 켜거나 끄는지 설명해보세요.
+
+TypeScript를 “문법”이 아니라 “프로젝트 전체 안전도 설계”로 보는지 확인할 수 있다. 팀 생산성과 엄격함 사이의 trade-off를 설명할 수 있으면 좋다.
+
+#### 4. declaration merging이 무엇이고, 왜 `interface`가 여기서 유리한가요?
+
+기존 `interface` vs `type` 질문을 더 깊게 파는 질문이다. 라이브러리 타입 보강, 전역 객체 확장, 프레임워크 타입 커스터마이징 경험과 연결하기 좋다.
+
+#### 5. `as`, non-null assertion(`!`), assertion function은 언제 쓰고 언제 피하나요?
+
+이 질문은 TS 에러를 지우는 사람과 안전하게 설계하는 사람을 가르는 데 유용하다. “타입 단언은 런타임 검증이 아니라 컴파일러를 설득하는 행위”라는 관점을 분명히 말할 수 있어야 한다.
+
+#### 6. 모노레포에서 project references(`composite`, `incremental`)를 어떻게 활용하거나 관리하나요?
+
+기존 모노레포 질문을 운영 관점으로 확장하는 용도다. 빌드 속도, 에디터 반응성, 패키지 경계 관리까지 같이 설명할 수 있으면 실제 대규모 TS 운영 경험이 드러난다.
+
+### 이 섹션 보완 핵심
+
+TS 섹션은 이미 탄탄하다. 여기에 `satisfies`, 조건부 타입, 엄격한 TSConfig 옵션, declaration merging, 단언 계열 문법, project references를 더하면 타입 문법 사용자와 타입 시스템 설계자를 더 잘 가를 수 있다.
