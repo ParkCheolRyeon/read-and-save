@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import LoginForm from "@/components/LoginForm";
 import BookList from "@/components/BookList";
 import { isAuthenticated } from "@/lib/auth";
 import Spinner from "@/components/Spinner";
 
-export default function Home() {
-  const [mounted, setMounted] = useState(false);
-  const [auth, setAuth] = useState(false);
+function subscribe() {
+  return () => {};
+}
 
-  useEffect(() => {
-    setAuth(isAuthenticated());
-    setMounted(true);
-  }, []);
+export default function Home() {
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!mounted) {
     return (
@@ -23,7 +21,7 @@ export default function Home() {
     );
   }
 
-  if (!auth) {
+  if (!isAuthenticated()) {
     return <LoginForm />;
   }
 
