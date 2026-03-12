@@ -1,7 +1,7 @@
 ---
 title: "테스트 20문항"
 chapter: "08"
-summary: "단위 테스트부터 E2E까지 비용 대비 효과를 따지는 테스트 20문항입니다."
+summary: "단위 테스트부터 E2E(End-to-End)까지 비용 대비 효과를 따지는 테스트 20문항입니다."
 estimatedReadMinutes: 26
 learningGoals:
   - "테스트를 변경 내성 확보 수단으로 설명한다"
@@ -63,7 +63,7 @@ learningGoals:
 - 원인 명확
 - 통합 테스트
 - 실제 조합 검증
-- UI + 상태 + API mocking 조합
+- UI + 상태 + API(Application Programming Interface) mocking 조합
 - E2E
 
 #### 실제 사용자 흐름
@@ -82,7 +82,7 @@ learningGoals:
 
 ### 상세 해설
 
-이 질문은 ROI 감각을 본다.
+이 질문은 ROI(Return On Investment) 감각을 본다.
 
 - 단위가 맞는 것
 - 독립 로직
@@ -346,7 +346,7 @@ DnD는 테스트가 어려운 영역이다.
 
 “사용자가 어떻게 복구하느냐”를 포함한다.
 
-## 18. CI에 E2E 테스트를 넣을 때 실행 시간 문제를 어떻게 다루나요?
+## 18. CI(Continuous Integration)에 E2E 테스트를 넣을 때 실행 시간 문제를 어떻게 다루나요?
 
 ### 합격 답변 예시
 
@@ -409,25 +409,348 @@ DnD는 테스트가 어려운 영역이다.
 
 단순 암기보다 테스트 전략 철학을 보기 좋은 질문이다. unit test 중심이 좋은지, integration 중심이 더 현실적인지 판단 기준을 들을 수 있다.
 
+##### 합격 답변 예시
+
+테스트 피라미드는 단위 테스트를 가장 많이, E2E를 가장 적게 쌓는 전통적인 모델입니다. 반면 테스트 트로피는 통합 테스트를 가장 두텁게 가져가는 모델로, Kent C. Dodds가 프론트엔드 맥락에서 제안했습니다. 프론트엔드는 컴포넌트, 훅, 상태, API 호출이 밀접하게 엮여 있어서 단위 테스트만으로는 실제 동작 신뢰도가 낮을 수 있습니다. 그래서 저는 통합 테스트 비중을 높게 가져가되, 순수 로직은 단위 테스트, 핵심 흐름은 E2E로 보완하는 트로피 형태가 프론트엔드에 더 현실적이라고 생각합니다.
+
+##### 상세 해설
+
+두 모델의 차이는 “어디에 가장 많은 테스트를 집중하느냐”다.
+
+- 테스트 피라미드(Martin Fowler)
+  - 단위 테스트가 가장 많고 빠르다
+  - 위로 갈수록 느리고 비싸다
+  - 백엔드, 마이크로서비스에서 유효하다
+- 테스트 트로피(Kent C. Dodds)
+  - 통합 테스트가 가장 두텁다
+  - Static → Unit → Integration → E2E 순서
+  - 프론트엔드에서 비용 대비 효과가 좋다
+
+```typescript
+// 피라미드 관점: 순수 로직은 단위 테스트
+function calcDiscount(price: number, rate: number): number {
+  if (rate < 0 || rate > 1) throw new Error('Invalid rate');
+  return Math.round(price * (1 - rate));
+}
+
+// 단위 테스트
+test('할인 계산이 정확하다', () => {
+  expect(calcDiscount(10000, 0.1)).toBe(9000);
+  expect(() => calcDiscount(10000, -1)).toThrow();
+});
+```
+
+```tsx
+// 트로피 관점: 컴포넌트 통합 테스트
+test('쿠폰을 적용하면 할인 가격이 표시된다', async () => {
+  render(<CheckoutPage />);
+  await userEvent.type(screen.getByLabelText('쿠폰 코드'), 'SAVE10');
+  await userEvent.click(screen.getByRole('button', { name: '적용' }));
+  expect(await screen.findByText('할인 적용: -1,000원')).toBeInTheDocument();
+});
+```
+
+핵심은 어느 모델이 맞느냐가 아니라, 프로젝트 특성에 맞게 비중을 조절할 줄 아느냐다.
+
 #### 2. Contract Testing이 왜 필요하다고 보나요?
 
 프론트와 백엔드 API 계약이 어긋나는 문제를 얼마나 실무적으로 이해하는지 확인할 수 있다. mock만으로는 놓치기 쉬운 위험을 설명하기 좋다.
+
+##### 합격 답변 예시
+
+프론트엔드가 mock 기반으로 테스트를 통과해도, 실제 백엔드 응답 형식이 바뀌면 운영에서 깨질 수 있습니다. Contract Testing은 프론트와 백엔드가 합의한 API 스펙을 별도 계약으로 정의하고, 양쪽이 각각 그 계약을 지키는지 독립적으로 검증하는 방식입니다. 이렇게 하면 통합 환경 없이도 API 변경으로 인한 연동 실패를 사전에 잡을 수 있습니다. 즉 Contract Testing은 mock의 신뢰 한계를 보완하는 장치입니다.
+
+##### 상세 해설
+
+mock 기반 테스트의 가장 큰 위험은 “mock이 실제와 달라도 테스트가 통과한다”는 점이다.
+
+- Contract Testing이 해결하는 문제
+  - 백엔드가 필드 이름을 바꿨는데 프론트가 모른다
+  - 응답 구조가 바뀌었는데 mock은 그대로다
+  - 프론트가 없는 필드를 기대하고 있다
+- 대표 도구
+  - Pact: Consumer-Driven Contract Testing 대표 도구
+  - OpenAPI/Swagger 기반 자동 검증
+
+```typescript
+// Pact Consumer 테스트 예시 (프론트엔드 측)
+import { PactV3 } from '@pact-foundation/pact';
+
+const provider = new PactV3({
+  consumer: 'FrontendApp',
+  provider: 'UserService',
+});
+
+test('사용자 프로필을 정상 조회한다', async () => {
+  await provider
+    .given('사용자 ID 1이 존재한다')
+    .uponReceiving('프로필 조회 요청')
+    .withRequest({ method: 'GET', path: '/api/users/1' })
+    .willRespondWith({
+      status: 200,
+      body: {
+        id: 1,
+        name: '홍길동',
+        email: 'hong@example.com',
+      },
+    })
+    .executeTest(async (mockServer) => {
+      const res = await fetch(`${mockServer.url}/api/users/1`);
+      const data = await res.json();
+      expect(data.name).toBe('홍길동');
+    });
+});
+```
+
+Contract Testing은 E2E를 대체하는 것이 아니라, mock과 실제 서버 사이의 틈을 메우는 역할을 한다.
 
 #### 3. Visual Regression Test는 언제 ROI가 높다고 보나요?
 
 디자인 시스템, 마케팅 페이지, 어드민처럼 UI 변경 영향 범위가 넓은 제품에서 특히 유용하다. 기능 correctness와 시각 회귀를 분리해서 보는지 확인할 수 있다.
 
-#### 4. 접근성(a11y) 테스트는 자동화와 수동 검증을 어떻게 나누나요?
+##### 합격 답변 예시
+
+디자인 시스템 컴포넌트, 마케팅 랜딩 페이지, 어드민 대시보드처럼 UI 변경이 여러 곳에 영향을 미치는 경우에 ROI가 높다고 생각합니다. 기능 테스트는 동작이 맞는지를 보지만, 레이아웃이 밀렸는지, 색상이 바뀌었는지, 간격이 어긋났는지는 잡아주지 못합니다. Visual Regression Test는 스크린샷 비교를 통해 이런 시각적 변화를 자동으로 감지해줍니다. 다만 동적 콘텐츠가 많거나 자주 바뀌는 화면은 false positive가 잦아서 유지 비용이 높을 수 있습니다.
+
+##### 상세 해설
+
+Visual Regression Test는 “눈으로 봐야 아는 문제”를 자동화하는 것이다.
+
+- ROI가 높은 경우
+  - 디자인 시스템: 컴포넌트 하나가 수십 곳에 쓰인다
+  - 마케팅 페이지: 레이아웃 깨짐이 매출에 직결된다
+  - 다국어 지원: 텍스트 길이 변화로 레이아웃이 밀릴 수 있다
+- ROI가 낮은 경우
+  - 매일 바뀌는 대시보드
+  - 동적 데이터가 많은 목록 페이지
+- 대표 도구
+  - Chromatic (Storybook 연동)
+  - Percy
+  - Playwright 내장 스크린샷 비교
+
+```typescript
+// Playwright Visual Regression Test 예시
+import { test, expect } from '@playwright/test';
+
+test('버튼 컴포넌트가 시각적으로 변하지 않았다', async ({ page }) => {
+  await page.goto('/storybook/button--primary');
+  await expect(page.locator('.btn-primary')).toHaveScreenshot(
+    'button-primary.png',
+    { maxDiffPixelRatio: 0.01 }
+  );
+});
+
+test('결제 페이지 레이아웃이 유지된다', async ({ page }) => {
+  await page.goto('/checkout');
+  // 동적 데이터를 고정해서 스냅샷 안정성 확보
+  await page.route('/api/cart', (route) =>
+    route.fulfill({
+      json: { items: [{ name: '테스트 상품', price: 10000 }] },
+    })
+  );
+  await expect(page).toHaveScreenshot('checkout-layout.png');
+});
+```
+
+핵심은 기능 correctness 테스트와 시각 회귀 테스트를 분리해서 관리하는 것이다. 둘을 섞으면 실패 원인 파악이 어려워진다.
+
+#### 4. 접근성, a11y(Accessibility) 테스트는 자동화와 수동 검증을 어떻게 나누나요?
 
 품질을 기능 correctness만으로 보지 않는 사람인지 드러나는 질문이다. 자동 검사 도구와 실제 키보드/스크린리더 확인의 경계를 설명할 수 있으면 좋다.
 
-#### 5. MSW 같은 API mocking 도구를 왜 쓰나요?
+##### 합격 답변 예시
+
+자동화 도구로는 axe-core, eslint-plugin-jsx-a11y 같은 것으로 ARIA 속성 누락, 색상 대비, alt 텍스트 빈값, 잘못된 역할 같은 기계적 규칙 위반을 잡을 수 있습니다. 하지만 실제 키보드 탐색 순서가 자연스러운지, 스크린리더가 읽는 흐름이 의미가 통하는지, 포커스 이동이 사용자 기대와 맞는지는 수동 확인이 필요합니다. 즉 자동화는 기본 품질 바닥을 깔아주고, 수동 검증은 실제 사용 경험 품질을 확인하는 역할입니다.
+
+##### 상세 해설
+
+a11y 테스트는 자동화만으로 전체 접근성 문제의 약 30~40% 정도만 잡을 수 있다는 점을 알아야 한다.
+
+- 자동화가 잡을 수 있는 것
+  - ARIA 속성 누락/잘못된 사용
+  - 색상 대비 부족 (WCAG AA 기준)
+  - img alt 텍스트 빈값
+  - 중복된 id
+  - label 연결 누락
+- 수동 검증이 필요한 것
+  - 키보드 탐색 순서와 흐름
+  - 스크린리더 읽기 순서의 의미
+  - 모달/드롭다운 포커스 트랩
+  - 동적 콘텐츠 변경 알림 (live region)
+  - 복잡한 위젯의 키보드 상호작용
+
+```typescript
+// axe-core를 활용한 자동 접근성 테스트
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+
+test('메인 페이지가 접근성 기본 규칙을 충족한다', async ({ page }) => {
+  await page.goto('/');
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa'])
+    .analyze();
+  expect(results.violations).toEqual([]);
+});
+```
+
+```typescript
+// Vitest + Testing Library에서 접근성 검증
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+test('모달이 열리면 포커스가 모달 내부로 이동한다', async () => {
+  render(<ModalTrigger />);
+  await userEvent.click(screen.getByRole('button', { name: '열기' }));
+
+  const modal = screen.getByRole('dialog');
+  expect(modal).toBeInTheDocument();
+  // 포커스가 모달 내부 첫 번째 요소로 이동했는지 확인
+  expect(modal.contains(document.activeElement)).toBe(true);
+});
+
+test('ESC 키로 모달을 닫을 수 있다', async () => {
+  render(<ModalTrigger />);
+  await userEvent.click(screen.getByRole('button', { name: '열기' }));
+  await userEvent.keyboard('{Escape}');
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+```
+
+좋은 답변은 “axe 돌리면 됩니다”에 그치지 않고, 자동화의 한계와 수동 검증이 필요한 구체적인 시나리오를 함께 말해야 한다.
+
+#### 5. MSW(Mock Service Worker) 같은 API mocking 도구를 왜 쓰나요?
 
 기존 API mocking 질문을 더 구체화해준다. 네트워크 계층을 실제에 가깝게 흉내 내면서도 테스트 안정성을 높이는 방법을 설명할 수 있다.
+
+##### 합격 답변 예시
+
+MSW는 Service Worker를 이용해 네트워크 수준에서 요청을 가로채기 때문에, 애플리케이션 코드를 전혀 수정하지 않고도 API 응답을 제어할 수 있습니다. jest.mock이나 함수 레벨 mocking은 구현에 의존하게 되지만, MSW는 실제 fetch/axios 호출이 그대로 실행되고 네트워크 계층에서만 응답을 바꾸므로 테스트 신뢰도가 더 높습니다. 또한 브라우저 환경(Storybook, 개발 서버)과 Node 환경(Vitest, Jest) 모두에서 같은 핸들러를 재사용할 수 있어서 mock 관리 비용이 줄어듭니다.
+
+##### 상세 해설
+
+MSW의 핵심 가치는 “테스트 코드가 아니라 네트워크 계층에서 mocking한다”는 점이다.
+
+- 기존 방식의 문제
+  - jest.mock으로 모듈을 직접 교체 → 구현 의존
+  - axios adapter 교체 → 라이브러리 변경 시 깨짐
+  - 전역 fetch를 덮어쓰기 → 부작용 위험
+- MSW의 장점
+  - 네트워크 수준 가로채기 → 코드 무수정
+  - 브라우저/Node 환경 동일 핸들러
+  - 에러, 지연, 부분 실패 시뮬레이션 용이
+  - Storybook, 개발 서버에서도 활용 가능
+
+```typescript
+// MSW 핸들러 정의
+import { http, HttpResponse, delay } from 'msw';
+
+export const handlers = [
+  // 정상 응답
+  http.get('/api/users', () => {
+    return HttpResponse.json([
+      { id: 1, name: '홍길동' },
+      { id: 2, name: '김영희' },
+    ]);
+  }),
+
+  // 에러 응답
+  http.get('/api/users/:id', ({ params }) => {
+    if (params.id === '999') {
+      return new HttpResponse(null, { status: 404 });
+    }
+    return HttpResponse.json({ id: params.id, name: '홍길동' });
+  }),
+
+  // 네트워크 지연 시뮬레이션
+  http.post('/api/orders', async () => {
+    await delay(2000);
+    return HttpResponse.json({ orderId: 'ORD-001' });
+  }),
+];
+```
+
+```typescript
+// Vitest에서 MSW 사용
+import { setupServer } from 'msw/node';
+import { handlers } from './handlers';
+
+const server = setupServer(...handlers);
+
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+test('사용자 목록을 불러와 표시한다', async () => {
+  render(<UserList />);
+  expect(await screen.findByText('홍길동')).toBeInTheDocument();
+  expect(screen.getByText('김영희')).toBeInTheDocument();
+});
+
+test('API 실패 시 에러 메시지를 표시한다', async () => {
+  // 특정 테스트에서만 핸들러 오버라이드
+  server.use(
+    http.get('/api/users', () => {
+      return new HttpResponse(null, { status: 500 });
+    })
+  );
+  render(<UserList />);
+  expect(await screen.findByText('목록을 불러올 수 없습니다')).toBeInTheDocument();
+});
+```
+
+핵심은 MSW를 “mock 도구”로만 보지 않고, 테스트와 개발 환경 전반에서 네트워크 계약을 일관되게 관리하는 도구로 이해하는 것이다.
 
 #### 6. Coverage 수치가 높다고 좋은 테스트라고 볼 수 없는 이유는 무엇인가요?
 
 이 질문은 테스트를 숫자 게임으로 보는 사람을 걸러낸다. “무엇을 실행했는가”와 “무엇을 의미 있게 검증했는가”의 차이를 설명할 수 있어야 한다.
+
+##### 합격 답변 예시
+
+Coverage는 코드가 실행되었는지만 측정하지, 그 실행 결과를 의미 있게 검증했는지는 알려주지 않습니다. 예를 들어 assertion 없이 함수를 호출만 해도 커버리지는 올라갑니다. 또한 100% 커버리지라 해도 경계값, 에러 경로, 비동기 타이밍 같은 실제 장애 원인을 놓칠 수 있습니다. 그래서 커버리지는 테스트가 닿지 않는 사각지대를 찾는 보조 지표로는 유용하지만, 테스트 품질의 기준이 되어서는 안 됩니다.
+
+##### 상세 해설
+
+커버리지의 한계를 정확히 아는 것이 중요하다.
+
+- 커버리지가 높아도 놓치는 것
+  - assertion 없는 테스트 → 실행만 하고 검증 안 함
+  - 정상 경로만 테스트 → 에러/경계값 빠짐
+  - 비동기 완료 전 검증 → flaky하지만 커버리지는 잡힘
+  - 구현 세부에 묶인 테스트 → 숫자는 높지만 리팩터링에 약함
+- 커버리지가 유용한 경우
+  - 아예 테스트가 닿지 않는 코드를 발견할 때
+  - PR 리뷰에서 새 코드의 테스트 유무를 확인할 때
+  - 팀 최소 기준선을 설정할 때 (예: 70% 이상)
+
+```typescript
+// 커버리지는 100%지만 나쁜 테스트
+function divide(a: number, b: number): number {
+  if (b === 0) throw new Error('Division by zero');
+  return a / b;
+}
+
+// assertion 없이 호출만 → 커버리지는 올라감
+test('divide를 호출한다', () => {
+  divide(10, 2);
+  divide(10, 0).catch(() => {}); // 에러를 무시
+  // expect가 없다 → 아무것도 검증하지 않았다
+});
+```
+
+```typescript
+// 커버리지는 같지만 좋은 테스트
+test('정상 나눗셈 결과를 반환한다', () => {
+  expect(divide(10, 2)).toBe(5);
+  expect(divide(-10, 2)).toBe(-5);
+  expect(divide(0, 5)).toBe(0);
+});
+
+test('0으로 나누면 에러가 발생한다', () => {
+  expect(() => divide(10, 0)).toThrow('Division by zero');
+});
+```
+
+커버리지 수치를 목표로 삼으면 “수치를 올리기 위한 테스트”를 쓰게 된다. 좋은 팀은 커버리지를 최소 기준선으로만 쓰고, 테스트의 진짜 가치는 변경 내성과 장애 예방으로 판단한다.
 
 ### 이 섹션 보완 핵심
 

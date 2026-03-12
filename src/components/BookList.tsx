@@ -67,7 +67,7 @@ export default function BookList() {
                 <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400">
                   <BookOpen className="size-6" />
                 </div>
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                <span className="font-medium text-zinc-900 [word-break:keep-all] dark:text-zinc-100">
                   {book.title}
                 </span>
               </Link>

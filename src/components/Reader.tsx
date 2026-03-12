@@ -157,7 +157,7 @@ export default function Reader({ slug }: ReaderProps) {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        <article className="mx-auto min-w-0 max-w-3xl break-words">
+        <article className="mx-auto min-w-0 max-w-3xl break-words [word-break:keep-all]">
           {(meta.summary || meta.estimatedReadMinutes || meta.learningGoals.length > 0) && (
             <section className="mb-8 rounded-3xl border border-zinc-200 bg-white px-5 py-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">

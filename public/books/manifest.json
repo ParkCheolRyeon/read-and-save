@@ -1,5 +1,65 @@
 [
   {
+    "id": "chapter1",
+    "filename": "chapter1.mdx",
+    "title": "Ch.1 실행 컨텍스트에서 stale closure까지"
+  },
+  {
+    "id": "chapter2",
+    "filename": "chapter2.mdx",
+    "title": "Ch.2 값 모델에서 불변성과 React 리렌더링까지"
+  },
+  {
+    "id": "chapter3",
+    "filename": "chapter3.mdx",
+    "title": "Ch.3 비동기 실행 모델에서 race condition까지"
+  },
+  {
+    "id": "chapter4",
+    "filename": "chapter4.mdx",
+    "title": "Ch.4 TypeScript에서 런타임 검증까지"
+  },
+  {
+    "id": "chapter5",
+    "filename": "chapter5.mdx",
+    "title": "Ch.5 React 렌더링 모델에서 상태 구조 설계까지"
+  },
+  {
+    "id": "chapter6",
+    "filename": "chapter6.mdx",
+    "title": "Ch.6 Next.js 렌더링 전략에서 서버 경계 설계까지"
+  },
+  {
+    "id": "chapter7",
+    "filename": "chapter7.mdx",
+    "title": "Ch.7 브라우저 요청 흐름에서 인증과 캐시, CDN까지"
+  },
+  {
+    "id": "chapter8",
+    "filename": "chapter8.mdx",
+    "title": "Ch.8 웹 성능 최적화에서 Core Web Vitals와 체감 성능까지"
+  },
+  {
+    "id": "chapter9",
+    "filename": "chapter9.mdx",
+    "title": "Ch.9 테스트 전략에서 CI 신뢰성까지"
+  },
+  {
+    "id": "chapter10",
+    "filename": "chapter10.mdx",
+    "title": "Ch.10 인프라와 배포에서 운영 안정성까지"
+  },
+  {
+    "id": "chapter11",
+    "filename": "chapter11.mdx",
+    "title": "Ch.11 프로젝트 면접 스토리에서 문제 정의와 운영 판단까지"
+  },
+  {
+    "id": "chapter12",
+    "filename": "chapter12.mdx",
+    "title": "Ch.12 전체 챕터 누락 문항 재점검"
+  },
+  {
     "id": "js-20",
     "filename": "js-20.mdx",
     "title": "js20문항"
