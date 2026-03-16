@@ -60,6 +60,46 @@
     "title": "Ch.12 전체 챕터 누락 문항 재점검"
   },
   {
+    "id": "react-hard-1",
+    "filename": "01-why-fiber.mdx",
+    "title": "Ch.1 why fiber"
+  },
+  {
+    "id": "react-hard-2",
+    "filename": "02-browser-scheduler.mdx",
+    "title": "Ch.2 browser scheduler"
+  },
+  {
+    "id": "react-hard-3",
+    "filename": "03-fiber-node-structure.mdx",
+    "title": "Ch.3 fiber node structure"
+  },
+  {
+    "id": "react-hard-4",
+    "filename": "04-render-commit-double-buffering.mdx",
+    "title": "Ch.4 render commit double buffering"
+  },
+  {
+    "id": "react-hard-5",
+    "filename": "05-reconciliation.mdx",
+    "title": "Ch.5 reconciliation"
+  },
+  {
+    "id": "react-hard-6",
+    "filename": "06-priority-and-lanes.mdx",
+    "title": "Ch.6 priority and lanes"
+  },
+  {
+    "id": "react-hard-7",
+    "filename": "07-concurrent-features.mdx",
+    "title": "Ch.7 concurrent features"
+  },
+  {
+    "id": "react-hard-8",
+    "filename": "08-debugging-and-modern-react.mdx",
+    "title": "Ch.8 debugging and modern react"
+  },
+  {
     "id": "js-20",
     "filename": "js-20.mdx",
     "title": "js20문항"

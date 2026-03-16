@@ -1,0 +1,311 @@
+---
+title: 05. Reconciliation — Fiber의 비교 알고리즘
+chapter: "05"
+summary: "Fiber가 이전 트리와 새 트리를 비교해 최소한의 변경을 찾아내는 재조정(Reconciliation) 알고리즘을 이해한다."
+analogy: "편집자의 교정 작업"
+learningGoals:
+  - "Reconciliation의 목적과 O(n) 휴리스틱의 근거를 설명할 수 있다"
+  - "key가 재조정 성능에 미치는 영향을 구체적으로 설명할 수 있다"
+  - "리스트 Reconciliation의 two-pass 전략을 설명할 수 있다"
+  - "실무에서 불필요한 리렌더링을 재조정 관점으로 진단할 수 있다"
+estimatedReadMinutes: 18
+keyQuestions:
+  - "React는 두 트리를 어떻게 효율적으로 비교하는가?"
+  - "key가 없으면 어떤 상황에서 성능 문제가 발생하는가?"
+sourceBaseline: "react@18.2.0"
+---
+
+# 05. Reconciliation — Fiber의 비교 알고리즘
+
+앞 장에서 Render Phase가 "다음 화면을 계산하는 단계"라고 배웠습니다.
+이 장에서는 그 계산의 핵심인 "이전 트리와 새 트리의 비교"가 어떻게 이루어지는지 구체적으로 살펴봅니다.
+
+## 비유 소개
+
+편집자가 원고를 수정할 때, 처음부터 다시 쓰지 않습니다.
+원본과 수정본을 나란히 놓고 **달라진 부분만** 빨간 펜으로 표시합니다.
+
+React의{" "}
+<InlineAnnotation term="Reconciliation">
+  이전 Fiber 트리(current)와 새로 계산한 트리(workInProgress)를 비교해
+  최소한의 변경 사항을 찾아내는 과정입니다. "재조정"이라고도 부르며,
+  Render Phase의 핵심 계산에 해당합니다.
+</InlineAnnotation>
+도 같은 원리입니다.
+이전 Fiber 트리(`current`)와 새로 계산한 트리(`workInProgress`)를 비교해서
+실제로 변경이 필요한 노드만 찾아냅니다.
+
+## 문제 정의
+
+트리 두 개를 완전히 비교하는 일반적인 알고리즘(트리 편집 거리, tree edit distance)은 O(n³) 복잡도를 가집니다.
+노드 1,000개짜리 트리라면 10억 번의 비교가 필요해집니다.
+
+이 비용을 감당하면서 매 업데이트마다 트리를 비교하는 것은 현실적이지 않습니다.
+
+실무에서 마주치는 증상은 다음과 같습니다.
+
+- 리스트 항목 하나만 바꿨는데 전체 리스트가 리렌더링된다
+- 순서가 바뀐 항목들이 DOM에서 삭제 후 재생성된다
+- key를 index로 넣었더니 입력 상태가 엉뚱한 항목에 붙는다
+
+## 해결 방법
+
+React는 두 가지{" "}
+<InlineAnnotation term="휴리스틱(heuristic)">
+  최적해를 보장하지는 않지만, 실용적인 가정을 기반으로 충분히 좋은 결과를
+  빠르게 도출하는 전략입니다. Reconciliation에서는 "타입이 다르면 전체 교체"와
+  "같은 형제 목록에서는 key로 매칭"이라는 두 가정이 이에 해당합니다.
+</InlineAnnotation>
+으로 O(n) 비교를 달성합니다.
+
+1. **타입이 다르면 하위 트리 전체를 교체한다**
+   - `<div>` → `<section>`이면 기존 하위 트리를 언마운트하고 새로 생성한다
+   - 같은 레벨에서 타입만 비교하므로, 크로스 레벨 이동은 감지하지 않는다
+
+2. **같은 타입의 형제 목록에서는 `key`로 매칭한다**
+   - key가 같은 노드끼리 1:1 매칭해 이동/수정을 판단한다
+   - key가 없으면 순서(index) 기반으로 비교하며, 순서 변경 시 불필요한 재생성이 발생한다
+
+<div className="rf-callout">
+  <strong>핵심 포인트</strong>
+  <p className="rf-small">
+    Reconciliation은 "완벽한 최소 변경"을 찾는 대신, 실용적 가정(타입 기반 + key 기반)으로
+    충분히 빠른 비교를 달성하는 전략입니다.
+  </p>
+</div>
+
+## 기술적 구현 (TypeScript 의사 코드)
+
+### 단일 노드 비교: reconcileSingleElement
+
+아래 코드는 설명용으로 단순화한 의사 코드입니다.
+실제 React 구현에서는 `currentChild`의 형제(sibling)를 순회하며 key 매칭을 먼저 수행합니다.
+
+```ts
+function reconcileSingleElement(
+  returnFiber: FiberNode,
+  currentChild: FiberNode | null,
+  element: ReactElement
+): FiberNode {
+  // 기존 자식이 있고, 타입이 같으면 재사용
+  if (currentChild !== null && currentChild.type === element.type) {
+    // key도 같으면 기존 Fiber를 업데이트
+    if (currentChild.key === element.key) {
+      const existing = useFiber(currentChild, element.props);
+      existing.return = returnFiber;
+      return existing;
+    }
+  }
+
+  // 타입 또는 key가 다르면 기존 노드를 삭제 예약하고 새로 생성
+  if (currentChild !== null) {
+    deleteChild(returnFiber, currentChild);
+  }
+
+  const created = createFiberFromElement(element);
+  created.return = returnFiber;
+  return created;
+}
+```
+
+핵심은 `type`과 `key`의 일치 여부만으로 재사용/교체를 결정한다는 점입니다.
+
+### 리스트 비교: reconcileChildrenArray
+
+리스트 비교는 더 복잡합니다. React는 두 패스(pass)로 처리합니다.
+
+```ts
+function reconcileChildrenArray(
+  returnFiber: FiberNode,
+  currentFirstChild: FiberNode | null,
+  newChildren: ReactElement[]
+): FiberNode | null {
+  let resultingFirstChild: FiberNode | null = null;
+  let previousNewFiber: FiberNode | null = null;
+  let oldFiber: FiberNode | null = currentFirstChild;
+  let newIdx = 0;
+
+  // === Pass 1: 순서가 같은 앞부분을 빠르게 처리 ===
+  // 같은 위치에서 key가 일치하면 업데이트, 불일치하면 중단
+  while (oldFiber !== null && newIdx < newChildren.length) {
+    if (oldFiber.key !== newChildren[newIdx].key) {
+      break; // key 불일치: Pass 2로 이동
+    }
+
+    const newFiber = updateSlot(returnFiber, oldFiber, newChildren[newIdx]);
+    // newFiber를 결과 리스트에 연결
+    // newFiber를 결과 리스트에 연결 (sibling 포인터 설정)
+    linkFiber(resultingFirstChild, previousNewFiber, newFiber);
+    previousNewFiber = newFiber;
+    oldFiber = oldFiber.sibling;
+    newIdx++;
+  }
+
+  // === 남은 old 노드 정리 ===
+  if (newIdx === newChildren.length) {
+    // 새 리스트가 더 짧으면 남은 old를 모두 삭제
+    deleteRemainingChildren(returnFiber, oldFiber);
+    return resultingFirstChild;
+  }
+
+  // === Pass 2: 나머지를 key 기반 Map으로 매칭 ===
+  // 남은 old 노드를 key → Fiber Map으로 변환
+  const existingChildren = mapRemainingChildren(oldFiber);
+
+  for (; newIdx < newChildren.length; newIdx++) {
+    const newFiber = updateFromMap(
+      existingChildren,
+      returnFiber,
+      newChildren[newIdx]
+    );
+    if (newFiber !== null) {
+      existingChildren.delete(newFiber.key ?? newIdx);
+      // newFiber를 결과 리스트에 연결 (sibling 포인터 설정)
+      linkFiber(resultingFirstChild, previousNewFiber, newFiber);
+      previousNewFiber = newFiber;
+    }
+  }
+
+  // Map에 남은 old 노드는 삭제
+  existingChildren.forEach((child) => deleteChild(returnFiber, child));
+
+  return resultingFirstChild;
+}
+```
+
+두 패스 전략의 핵심:
+
+- **Pass 1**: 앞에서부터 순서대로 key를 비교합니다. 대부분의 업데이트에서 리스트 순서가 유지되므로, 이 단계에서 대부분의 노드가 처리됩니다.
+- **Pass 2**: 순서가 바뀐 경우에만 Map을 생성해 key 기반 매칭을 수행합니다. Map 생성 비용이 있으므로 Pass 1에서 최대한 처리하는 것이 성능에 유리합니다.
+
+## key의 역할 시각화
+
+### key가 없는 경우 (index 기반)
+
+항목 B를 맨 앞에 추가하면:
+
+```
+이전:  [A, C, D]        (index: 0, 1, 2)
+다음:  [B, A, C, D]     (index: 0, 1, 2, 3)
+
+비교 결과:
+  index 0: A → B  (타입 같지만 내용 다름 → 업데이트)
+  index 1: C → A  (타입 같지만 내용 다름 → 업데이트)
+  index 2: D → C  (타입 같지만 내용 다름 → 업데이트)
+  index 3: 없음 → D  (새로 생성)
+
+결과: 4개 노드 모두 변경 → 비효율적
+```
+
+### key가 있는 경우
+
+```
+이전:  [A(key:a), C(key:c), D(key:d)]
+다음:  [B(key:b), A(key:a), C(key:c), D(key:d)]
+
+비교 결과:
+  key "a": 재사용 (위치만 이동)
+  key "c": 재사용 (위치만 이동)
+  key "d": 재사용 (위치만 이동)
+  key "b": 새로 생성
+
+결과: 1개만 생성, 나머지는 이동 → 효율적
+```
+
+## 브라우저 연동: DOM 조작 최소화
+
+지금까지 Reconciliation이 변경을 찾아내는 과정을 보았습니다.
+이제 그 결과가 실제 브라우저에 어떻게 반영되는지 간략히 확인하겠습니다.
+
+Reconciliation의 결과는 Commit Phase에서 실제 DOM 조작으로 이어집니다.
+
+| Reconciliation 판정 | Commit에서의 DOM 조작 | 비용 |
+| --- | --- | --- |
+| 재사용 (props만 변경) | `setAttribute` / `textContent` 변경 | 낮음 |
+| 이동 | `insertBefore` / `appendChild` | 중간 |
+| 삭제 후 재생성 | `removeChild` + `createElement` + 이벤트 재등록 | 높음 |
+
+key를 올바르게 사용하면 "삭제 후 재생성"을 "이동"으로 바꿀 수 있어,
+DOM 조작 비용을 크게 줄일 수 있습니다.
+
+## 실습 예제 (코드리뷰형)
+
+### 시나리오
+
+할 일 목록에서 완료된 항목을 맨 아래로 이동하는 기능을 구현했는데,
+항목을 완료 처리할 때마다 입력 필드의 포커스가 사라지고 애니메이션이 끊깁니다.
+
+```tsx
+function TodoList({ todos }: { todos: Todo[] }) {
+  const sorted = [...todos].sort((a, b) =>
+    a.completed === b.completed ? 0 : a.completed ? 1 : -1
+  );
+
+  return (
+    <ul>
+      {sorted.map((todo, index) => (
+        <TodoItem key={index} todo={todo} />
+      ))}
+    </ul>
+  );
+}
+```
+
+### 질문
+
+1. `key={index}`가 이 시나리오에서 왜 문제가 되는가?
+2. Reconciliation 관점에서 "포커스 소실"과 "애니메이션 끊김"의 원인은 무엇인가?
+3. key를 `todo.id`로 바꾸면 Reconciliation이 어떻게 달라지는가?
+
+### 답안 체크리스트
+
+- [ ] 정렬로 인해 index와 실제 항목의 매핑이 바뀌면 React가 "다른 항목"으로 인식한다고 설명했다.
+- [ ] 삭제 후 재생성이 발생하면 DOM 상태(포커스, 애니메이션)가 초기화된다고 설명했다.
+- [ ] 안정적인 고유 key를 사용하면 "이동"으로 처리되어 DOM 상태가 보존된다고 설명했다.
+
+## Source Map
+
+> 이 장부터는 각 장에서 다루는 React 소스 파일을 직접 안내합니다.
+> 01~04장의 관련 소스 파일은 [React 소스 매핑 부록](/book/reference/react-source-map)을 참고하세요.
+
+<SourceMapTable entries={[
+  {
+    modulePath: "packages/react-reconciler/src/ReactChildFiber.js",
+    symbols: ["reconcileChildFibers", "reconcileSingleElement", "reconcileChildrenArray"],
+    whyItMatters: "Reconciliation의 핵심 로직이 구현된 파일",
+    readHint: "reconcileChildrenArray의 two-pass 구조를 따라가면 리스트 비교 전략을 이해할 수 있다"
+  },
+  {
+    modulePath: "packages/react-reconciler/src/ReactFiber.js",
+    symbols: ["createFiberFromElement", "useFiber", "createWorkInProgress"],
+    whyItMatters: "Fiber 노드 생성과 재사용 로직",
+    readHint: "useFiber가 기존 Fiber를 어떻게 clone하는지 보면 재사용 조건을 파악할 수 있다"
+  }
+]} />
+
+## 오해 바로잡기
+
+1. **"Reconciliation이 느리면 React.memo를 쓰면 된다"**
+   - `React.memo`는 컴포넌트 진입 전에 props 비교를 추가하는 것이다. Reconciliation 자체를 건너뛰는 것이 아니라, beginWork에서 <InlineAnnotation term="bailout">beginWork 진입 시 props/state 변경이 없다고 판단되면 해당 Fiber의 하위 트리 순회를 건너뛰는 최적화 경로입니다. React.memo, shouldComponentUpdate 등이 이 조건을 트리거합니다.</InlineAnnotation> 조건을 추가하는 최적화다.
+
+2. **"key는 리스트에만 필요하다"**
+   - 리스트가 아니더라도 key를 바꾸면 컴포넌트를 강제 재생성(unmount → mount)할 수 있다. 이를 이용해 의도적으로 상태를 초기화하는 패턴도 있다.
+
+3. **"O(n³)이 O(n)이 되면 모든 게 빠르다"**
+   - O(n) 비교 자체는 빠르지만, n이 크면(수천 개 노드) 여전히 눈에 띄는 비용이 된다. 가상화(virtualization)나 작업 분할이 추가로 필요할 수 있다.
+
+## 요약 체크리스트
+
+- [ ] 일반 트리 비교(O(n³))와 React 휴리스틱(O(n))의 차이를 설명할 수 있다.
+- [ ] 타입 기반 비교와 key 기반 비교의 역할을 구분해 설명할 수 있다.
+- [ ] 리스트 Reconciliation의 two-pass 전략을 설명할 수 있다.
+- [ ] key가 DOM 상태 보존에 미치는 영향을 실무 예시로 설명할 수 있다.
+
+## 다음 장 예고: 우선순위와 Lane 모델
+
+이 장에서는 "무엇을 바꿀지" 결정하는 Reconciliation을 다뤘습니다.
+다음 장에서는 "어떤 업데이트를 먼저 처리할지" 결정하는 우선순위 시스템을 살펴봅니다.
+
+- Lane 비트마스크로 업데이트 긴급도를 표현하는 방식
+- `setState`와 `startTransition`이 서로 다른 Lane을 부여받는 이유
+- 우선순위 역전(priority inversion)과 starvation 방지 전략

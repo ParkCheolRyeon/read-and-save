@@ -1,0 +1,416 @@
+---
+title: 06. 우선순위와 Lane 모델
+chapter: "06"
+summary: "React의 Lane 기반 우선순위 시스템을 이해하고, 업데이트 긴급도에 따른 스케줄링 전략을 설명한다."
+analogy: "응급실 트리아지"
+learningGoals:
+  - "Lane 비트마스크가 업데이트 우선순위를 표현하는 방식을 설명할 수 있다"
+  - "setState와 startTransition이 서로 다른 Lane을 부여받는 이유를 설명할 수 있다"
+  - "expirationTime에서 Lane으로 전환된 이유를 설명할 수 있다"
+  - "우선순위 역전과 starvation 방지 전략을 설명할 수 있다"
+estimatedReadMinutes: 20
+keyQuestions:
+  - "React는 어떤 업데이트를 먼저 처리할지 어떻게 결정하는가?"
+  - "Lane은 기존 expirationTime 모델과 어떻게 다른가?"
+sourceBaseline: "react@18.2.0"
+---
+
+# 06. 우선순위와 Lane 모델
+
+앞 장에서 Reconciliation이 "무엇을 바꿀지" 결정하는 과정을 다뤘습니다.
+이 장에서는 "어떤 업데이트를 먼저 처리할지" 결정하는 우선순위 시스템을 살펴봅니다.
+
+## 비유 소개
+
+응급실에서는 환자가 도착한 순서대로 치료하지 않습니다.
+<InlineAnnotation term="트리아지(Triage)">
+  응급 의료에서 환자의 중증도를 평가해 치료 순서를 결정하는 분류 체계입니다.
+  React의 Lane 모델도 업데이트의 긴급도를 분류해 처리 순서를 결정합니다.
+</InlineAnnotation>
+를 적용해 가장 긴급한 환자부터 치료합니다.
+
+React도 모든 `setState`를 동일하게 취급하지 않습니다.
+사용자 클릭 반응은 즉시 처리해야 하지만, 백그라운드 데이터 프리패치는 나중에 해도 됩니다.
+이 차이를 표현하는 것이 Lane 모델입니다.
+
+## 문제 정의
+
+앞 장들에서 다룬 Fiber 아키텍처(React 16)와 함께 도입된 우선순위 모델이 expirationTime이었습니다.
+약 3년간 사용된 뒤, React 18에서 Concurrent Features를 본격 지원하기 위해 Lane 모델로 교체되었습니다.
+
+React 16~17에서는{" "}
+<InlineAnnotation term="expirationTime">
+  업데이트의 만료 시각을 숫자로 표현한 기존 우선순위 모델입니다.
+  만료 시각이 빠를수록 높은 우선순위로 처리됩니다.
+  단순하지만 여러 우선순위를 동시에 추적하기 어려운 한계가 있었습니다.
+</InlineAnnotation>
+이라는 숫자 기반 우선순위 모델을 사용했습니다.
+
+이 모델의 한계는 다음과 같습니다.
+
+1. **단일 숫자의 한계**: 한 Fiber에 여러 우선순위 업데이트가 동시에 걸릴 때, 하나의 숫자로는 "이 업데이트는 긴급, 저 업데이트는 비긴급"을 동시에 표현하기 어렵다.
+2. **그룹 배칭의 어려움**: "같은 우선순위의 업데이트를 묶어서 처리"하려면 숫자 범위를 비교해야 해서 로직이 복잡해진다.
+3. **우선순위 역전**: 낮은 우선순위 작업이 높은 우선순위 작업을 블로킹하는 상황을 감지하고 해소하기 어렵다.
+
+## 해결 방법
+
+React 18에서 도입된{" "}
+<InlineAnnotation term="Lane">
+  비트마스크(bitmask) 기반의 우선순위 모델입니다. 각 Lane은 하나의 비트 위치를 차지하며,
+  비트 연산(AND, OR)으로 여러 우선순위를 동시에 추적하고 조합할 수 있습니다.
+</InlineAnnotation>
+모델은 비트마스크를 사용해 위 문제를 해결합니다.
+
+핵심 아이디어:
+
+1. **비트 단위 표현**: 각 우선순위가 하나의 비트 위치를 차지한다. 여러 우선순위를 OR로 합칠 수 있다.
+2. **그룹 연산**: 같은 카테고리의 Lane들을 비트 범위로 묶어 한 번에 비교/처리할 수 있다.
+3. **독립적 추적**: 한 Fiber에 여러 Lane이 동시에 걸려도 각각 독립적으로 추적 가능하다.
+
+## 기술적 구현 (TypeScript 의사 코드)
+
+아래 코드는 설명용으로 단순화한 의사 코드입니다.
+실제 React에서는 31비트를 사용하며, Lane 간 우선순위 비교는 더 세분화되어 있습니다.
+
+### Lane 정의
+
+```ts
+// Lane은 비트마스크로 표현된다 (실제 React는 31개 비트를 사용)
+type Lane = number;
+type Lanes = number; // 여러 Lane의 OR 조합
+
+const NoLane:    Lane = 0b0000000;
+const SyncLane:  Lane = 0b0000001; // 최고 우선순위: 동기 업데이트
+const InputLane: Lane = 0b0000010; // 사용자 입력 (클릭, 키 입력)
+const DefaultLane: Lane = 0b0000100; // 일반 setState
+const TransitionLane1: Lane = 0b0001000; // startTransition 업데이트
+const TransitionLane2: Lane = 0b0010000; // startTransition 업데이트 (추가 슬롯)
+const IdleLane:  Lane = 0b0100000; // 유휴 시간 처리
+
+// 여러 Lane을 그룹으로 묶기
+const TransitionLanes: Lanes = TransitionLane1 | TransitionLane2;
+```
+
+### Lane 연산
+
+```ts
+// 특정 Lane이 포함되어 있는지 확인
+function includesLane(set: Lanes, lane: Lane): boolean {
+  return (set & lane) !== NoLane;
+}
+
+// Lane 합치기
+function mergeLanes(a: Lanes, b: Lanes): Lanes {
+  return a | b;
+}
+
+// 가장 높은 우선순위 Lane 추출
+function getHighestPriorityLane(lanes: Lanes): Lane {
+  // 가장 오른쪽(낮은 비트 = 높은 우선순위) 비트를 추출
+  return lanes & -lanes;
+}
+```
+
+### 비트 연산 시각화
+
+비트마스크에 익숙하지 않은 독자를 위해, 핵심 연산을 시각적으로 정리합니다.
+
+```
+Lane 비트 배치 (오른쪽 = 높은 우선순위):
+
+SyncLane:        0 0 0 0 0 0 1
+InputLane:       0 0 0 0 0 1 0
+DefaultLane:     0 0 0 0 1 0 0
+TransitionLane1: 0 0 0 1 0 0 0
+TransitionLane2: 0 0 1 0 0 0 0
+IdleLane:        0 1 0 0 0 0 0
+
+mergeLanes(SyncLane, DefaultLane):
+  0 0 0 0 0 0 1
+| 0 0 0 0 1 0 0
+= 0 0 0 0 1 0 1  → SyncLane + DefaultLane 동시 추적
+
+getHighestPriorityLane(0b0000101):
+  0 0 0 0 1 0 1  &  -(0 0 0 0 1 0 1)
+= 0 0 0 0 0 0 1  → 가장 오른쪽 비트(SyncLane) 추출
+```
+
+<div className="rf-callout">
+  <strong>핵심 포인트</strong>
+  <p className="rf-small">
+    Lane은 비트 연산으로 여러 우선순위를 O(1)에 조합하고 비교할 수 있습니다.
+    이것이 숫자 하나로는 어려웠던 "동시 다중 우선순위 추적"을 가능하게 합니다.
+  </p>
+</div>
+
+### 업데이트 → Lane 부여
+
+```ts
+function requestUpdateLane(): Lane {
+  // 현재 실행 컨텍스트에 따라 Lane을 결정
+  if (isInsideSyncEvent()) {
+    return SyncLane;
+  }
+
+  if (isInsideTransition()) {
+    // startTransition 내부에서 호출된 setState
+    return claimNextTransitionLane();
+  }
+
+  // 일반 setState
+  return DefaultLane;
+}
+
+// Fiber에 Lane 마킹 — 루트까지 올라가며 childLanes를 설정한다
+function markUpdateLaneFromFiberToRoot(fiber: FiberNode, lane: Lane): void {
+  // 현재 Fiber에 lane 추가
+  fiber.lanes = mergeLanes(fiber.lanes, lane);
+
+  // alternate에도 마킹 (Double Buffering)
+  if (fiber.alternate !== null) {
+    fiber.alternate.lanes = mergeLanes(fiber.alternate.lanes, lane);
+  }
+
+  // 루트까지 올라가며 childLanes에 마킹
+  // childLanes: "하위 트리 어딘가에 처리할 업데이트가 있다"는 신호 비트
+  let parent = fiber.return;
+  while (parent !== null) {
+    parent.childLanes = mergeLanes(parent.childLanes, lane);
+    if (parent.alternate !== null) {
+      parent.alternate.childLanes = mergeLanes(parent.alternate.childLanes, lane);
+    }
+    parent = parent.return;
+  }
+}
+```
+
+코드 해석의 핵심:
+
+- `lanes`는 "이 Fiber 자체에 걸린 업데이트 우선순위"를 나타낸다.
+- <InlineAnnotation term="childLanes">부모 Fiber에 설정되는 비트로, "하위 트리 어딘가에 처리할 업데이트가 있다"는 신호입니다. childLanes가 비어 있으면 해당 서브트리를 통째로 건너뛸 수 있어(bailout), 대규모 트리에서도 효율적인 탐색이 가능합니다.</InlineAnnotation>는 "하위 트리 어딘가에 처리할 업데이트가 있다"는 신호다.
+- `childLanes`가 비어 있으면 해당 서브트리를 통째로 건너뛸 수 있다(bailout).
+
+### Render에서 Lane 활용
+
+05장에서 배운 bailout(불필요한 서브트리 건너뛰기)이 Lane 수준에서 어떻게 작동하는지 살펴보겠습니다.
+05장의 bailout은 "타입과 props가 같으면 건너뛴다"였지만, 여기서는 "해당 Lane의 업데이트가 없으면 건너뛴다"로 확장됩니다.
+
+```ts
+function beginWork(fiber: FiberNode, renderLanes: Lanes): FiberNode | null {
+  // 이 Fiber에 현재 처리 중인 Lane의 업데이트가 없으면 bailout
+  if (!includesLane(fiber.lanes, renderLanes)) {
+    // childLanes도 없으면 서브트리 전체를 건너뛴다
+    if (!includesLane(fiber.childLanes, renderLanes)) {
+      return null; // bailout: 이 서브트리에 할 일 없음
+    }
+    // 자식 중에는 업데이트가 있으므로 자식으로 내려간다
+    return cloneChildFibers(fiber);
+  }
+
+  // 이 Fiber에 업데이트가 있으므로 렌더링 수행
+  return processUpdate(fiber, renderLanes);
+}
+```
+
+<div className="rf-callout">
+  <strong>핵심 포인트</strong>
+  <p className="rf-small">
+    Lane과 childLanes의 조합으로 "이 서브트리에 할 일이 있는가?"를 O(1)로 판단할 수 있습니다.
+    이것이 대규모 트리에서도 Fiber가 효율적으로 동작하는 핵심 메커니즘입니다.
+  </p>
+</div>
+
+## expirationTime vs Lane 비교
+
+| 항목 | expirationTime | Lane |
+| --- | --- | --- |
+| 표현 방식 | 단일 숫자 (만료 시각) | 비트마스크 (비트 위치) |
+| 동시 추적 | 하나의 우선순위만 | 여러 우선순위를 OR로 조합 |
+| 그룹 배칭 | 숫자 범위 비교 (복잡) | 비트 범위 AND 연산 (단순) |
+| bailout 판단 | 만료 시각 비교 | `lanes & renderLanes` 비트 연산 |
+| 확장성 | 새 우선순위 추가 시 범위 조정 필요 | 새 비트 위치만 할당 |
+
+## startTransition의 내부 동작
+
+`startTransition`이 어떻게 낮은 우선순위 Lane을 부여하는지 의사 코드로 살펴봅니다.
+
+```ts
+let currentTransition: boolean = false;
+
+function startTransition(callback: () => void): void {
+  // 1. transition 플래그 활성화
+  currentTransition = true;
+
+  // 2. callback 실행 — 이 안에서 호출되는 setState는 TransitionLane을 받는다
+  callback();
+
+  // 3. transition 플래그 해제
+  currentTransition = false;
+}
+
+// setState 내부에서 호출
+function dispatchSetState(fiber: FiberNode, action: unknown): void {
+  const lane = requestUpdateLane(); // currentTransition이 true면 TransitionLane 반환
+
+  const update = createUpdate(action, lane);
+  enqueueUpdate(fiber, update);
+  markUpdateLaneFromFiberToRoot(fiber, lane);
+  scheduleUpdateOnFiber(fiber, lane);
+}
+```
+
+이 구조에서 주의할 점은, `callback()` 자체는 동기적으로 즉시 실행된다는 것입니다.
+양보가 일어나는 시점은 callback 실행이 아니라,
+callback 안의 `setState`가 스케줄링하는 **렌더링 작업**이 TransitionLane으로 예약되어,
+더 긴급한 작업이 있으면 뒤로 밀리는 단계입니다.
+
+결과적으로 개발자는 `startTransition(() => { setState(...) })`만 감싸면
+해당 업데이트가 자동으로 낮은 우선순위로 처리됩니다.
+
+## 우선순위 역전과 Starvation 방지
+
+### 우선순위 역전 문제
+
+높은 우선순위 업데이트가 계속 들어오면, 낮은 우선순위 작업이 영원히 실행되지 못하는 상황이 발생할 수 있습니다.
+이를{" "}
+<InlineAnnotation term="Starvation (기아 현상)">
+  낮은 우선순위 작업이 높은 우선순위 작업에 밀려 무한히 지연되는 현상입니다.
+  React는 만료 시간(expiration)을 두어 일정 시간이 지나면 낮은 우선순위 작업도
+  강제로 실행되도록 보장합니다.
+</InlineAnnotation>
+이라고 합니다.
+
+### React의 해결 전략
+
+```ts
+function markStarvedLanesAsExpired(root: FiberRoot, currentTime: number): void {
+  const pendingLanes = root.pendingLanes;
+  const expirationTimes = root.expirationTimes;
+
+  let lanes = pendingLanes;
+  // pendingLanes의 각 비트를 하나씩 꺼내어 만료 여부를 검사
+  while (lanes > 0) {
+    const lane = getHighestPriorityLane(lanes);
+    const index = laneToIndex(lane);
+
+    if (expirationTimes[index] === -1) {
+      // 아직 만료 시간이 설정되지 않았으면 설정
+      expirationTimes[index] = computeExpirationTime(lane, currentTime);
+    } else if (expirationTimes[index] <= currentTime) {
+      // 만료됨! 이 Lane을 expiredLanes에 추가해 즉시 처리되도록 한다
+      root.expiredLanes = mergeLanes(root.expiredLanes, lane);
+    }
+
+    lanes &= ~lane; // 처리한 비트 제거
+  }
+}
+```
+
+핵심 전략:
+
+- 각 Lane에 만료 시간을 부여한다.
+- 매 스케줄링 시점에 만료 여부를 확인한다.
+- 만료된 Lane은 `expiredLanes`로 승격되어 다음 렌더에서 반드시 처리된다.
+- 이렇게 하면 아무리 높은 우선순위 작업이 쏟아져도, 일정 시간이 지나면 낮은 우선순위 작업이 실행된다.
+
+<div className="rf-callout">
+  <strong>핵심 포인트</strong>
+  <p className="rf-small">
+    만료 메커니즘은 공정성을 보장하는 안전망입니다.
+    우선순위 시스템이 아무리 정교해도, starvation 방지 없이는
+    낮은 우선순위 작업이 영원히 지연될 수 있습니다.
+  </p>
+</div>
+
+## 실습 예제 (코드리뷰형)
+
+### 시나리오
+
+실시간 주식 차트 페이지에서 가격 업데이트(고빈도)와 차트 재계산(무거움)이
+같은 우선순위로 처리되어, 가격 표시가 끊기는 현상이 발생합니다.
+
+```tsx
+function StockDashboard({ symbol }: { symbol: string }) {
+  const [price, setPrice] = useState(0);
+  const [chartData, setChartData] = useState<Point[]>([]);
+
+  useEffect(() => {
+    const ws = new WebSocket(`wss://api.example.com/stocks/${symbol}`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setPrice(data.price);                      // 긴급: 가격 즉시 표시
+      setChartData(recalculateChart(data));       // 비긴급: 무거운 차트 재계산
+    };
+    return () => ws.close();
+  }, [symbol]);
+
+  return (
+    <>
+      <PriceDisplay price={price} />
+      <Chart data={chartData} />
+    </>
+  );
+}
+```
+
+### 질문
+
+1. 이 코드에서 `setPrice`와 `setChartData`는 같은 Lane을 받는가, 다른 Lane을 받는가?
+2. Lane 모델을 활용해 가격 표시와 차트 재계산의 우선순위를 분리하려면 어떻게 수정해야 하는가?
+3. 차트 재계산이 오래 밀리면 어떤 메커니즘이 이를 방지하는가?
+
+### 답안 체크리스트
+
+- [ ] 같은 비동기 콜백(WebSocket onmessage) 안의 두 setState가 React 18의 automatic batching으로 같은 Lane(DefaultLane)을 받아 배칭된다고 설명했다.
+- [ ] `startTransition`으로 차트 업데이트를 감싸면 TransitionLane을 부여받는다고 설명했다.
+- [ ] starvation 방지를 위한 만료 시간(expiration) 메커니즘을 언급했다.
+
+## Source Map
+
+<SourceMapTable entries={[
+  {
+    modulePath: "packages/react-reconciler/src/ReactFiberLane.js",
+    symbols: ["SyncLane", "DefaultLane", "TransitionLanes", "getHighestPriorityLane", "markStarvedLanesAsExpired"],
+    whyItMatters: "Lane 상수 정의와 비트 연산 유틸리티의 핵심 파일",
+    readHint: "getHighestPriorityLane의 비트 트릭(lanes & -lanes)이 왜 가장 오른쪽 비트를 추출하는지 확인"
+  },
+  {
+    modulePath: "packages/react-reconciler/src/ReactFiberWorkLoop.js",
+    symbols: ["scheduleUpdateOnFiber", "performConcurrentWorkOnRoot", "getNextLanes"],
+    whyItMatters: "Lane을 기반으로 렌더 작업을 스케줄링하는 핵심 루프",
+    readHint: "getNextLanes가 pendingLanes에서 다음 처리할 Lane 집합을 어떻게 선택하는지 추적"
+  },
+  {
+    modulePath: "packages/react/src/ReactStartTransition.js",
+    symbols: ["startTransition"],
+    whyItMatters: "transition 플래그 설정과 Lane 부여의 진입점",
+    readHint: "ReactCurrentBatchConfig.transition 값의 변경 시점을 확인"
+  }
+]} />
+
+## 오해 바로잡기
+
+1. **"Lane 숫자가 작을수록 항상 먼저 처리된다"**
+   - 비트 위치가 낮을수록 우선순위가 높은 것은 맞지만, expiredLanes에 포함된 Lane은 비트 위치와 무관하게 즉시 처리된다. 만료 메커니즘이 순수한 비트 순서를 오버라이드할 수 있다.
+
+2. **"startTransition은 setTimeout과 같다"**
+   - 아니다. `startTransition`은 실행을 지연시키는 것이 아니라, Lane을 낮춰서 다른 긴급 작업에 양보할 수 있게 만드는 것이다. callback 자체는 즉시 실행된다.
+
+3. **"모든 setState에 우선순위를 직접 지정할 수 있다"**
+   - 개발자가 Lane 값을 직접 선택하는 API는 없다. React가 호출 컨텍스트(이벤트 핸들러, transition, effect 등)를 기반으로 자동 결정한다. 개발자는 `startTransition`으로 "이건 긴급하지 않다"는 힌트만 줄 수 있다.
+
+## 요약 체크리스트
+
+- [ ] Lane 비트마스크가 업데이트 우선순위를 표현하는 방식을 설명할 수 있다.
+- [ ] `setState`와 `startTransition`이 서로 다른 Lane을 부여받는 이유를 설명할 수 있다.
+- [ ] expirationTime에서 Lane으로 전환된 이유를 설명할 수 있다.
+- [ ] 우선순위 역전(starvation)과 만료 기반 방지 전략을 설명할 수 있다.
+
+## 다음 장 예고: Concurrent Features와 실무 최적화
+
+이 장에서 Lane이 업데이트 우선순위를 표현하는 "언어"라면,
+다음 장에서는 그 언어를 실무에서 사용하는 "문법"을 다룹니다.
+
+- `useTransition` 훅의 반환값(`isPending`)과 `useDeferredValue`가 Lane을 활용하는 방식의 차이
+- `Suspense` boundary가 Fiber 트리에서 fallback을 처리하는 방식
+- 실무 성능 최적화에 Concurrent Features를 적절히 적용하는 패턴

@@ -1,0 +1,403 @@
+---
+title: 07. Concurrent Features와 실무 최적화
+chapter: "07"
+summary: "useTransition, useDeferredValue, Suspense 등 Concurrent Features의 내부 동작을 Fiber 관점에서 이해하고 실무에 적용한다."
+analogy: "고속도로 갓길과 본선"
+learningGoals:
+  - "useTransition이 Lane을 활용해 렌더링을 분리하는 메커니즘을 설명할 수 있다"
+  - "useDeferredValue가 이전 값을 유지하며 낮은 우선순위로 재렌더링하는 방식을 설명할 수 있다"
+  - "Suspense가 Fiber 트리에서 fallback을 처리하는 방식을 설명할 수 있다"
+  - "실무 성능 최적화에 Concurrent Features를 적절히 적용할 수 있다"
+estimatedReadMinutes: 22
+keyQuestions:
+  - "useTransition과 useDeferredValue는 내부적으로 어떻게 다른가?"
+  - "Suspense boundary는 Fiber 트리에서 어떤 역할을 하는가?"
+sourceBaseline: "react@18.2.0"
+---
+
+# 07. Concurrent Features와 실무 최적화
+
+앞 장에서 Lane이 업데이트 우선순위를 표현하는 "언어"라면,
+이 장에서는 그 언어를 실무에서 사용하는 "문법"을 다룹니다.
+`useTransition`, `useDeferredValue`, `Suspense`가 내부적으로 Lane과 Fiber를 어떻게 활용하는지 살펴봅니다.
+
+## 비유 소개
+
+고속도로에서 갓길은 본선 차량의 흐름을 방해하지 않으면서 긴급 차량이나 고장 차량을 처리하는 공간입니다.
+반대로 보면, 비긴급 작업을 갓길로 빼서 본선(긴급 업데이트)의 흐름을 지키는 것이기도 합니다.
+
+React의 Concurrent Features도 같은 원리입니다.
+<InlineAnnotation term="Concurrent Features">
+  React 18에서 도입된 기능 모음으로, Lane 기반 우선순위 시스템을 활용해
+  긴급 업데이트와 비긴급 업데이트를 분리 처리합니다.
+  useTransition, useDeferredValue, Suspense 등이 여기에 해당합니다.
+</InlineAnnotation>
+는 긴급 업데이트(사용자 입력 반영)가 비긴급 업데이트(무거운 계산)에 밀리지 않도록
+Lane을 분리해 스케줄링합니다.
+
+## 문제 정의
+
+Lane 모델이 있어도, 개발자가 직접 Lane을 조작할 API는 없습니다.
+실무에서 마주치는 문제는 다음과 같습니다.
+
+- 검색 입력 시 타이핑이 끊기는데, 어떤 업데이트를 "비긴급"으로 만들어야 하는지 모른다
+- 데이터 로딩 중 화면이 빈 상태로 깜빡이는데, 이전 UI를 유지하는 방법을 모른다
+- 비동기 컴포넌트의 로딩 상태를 선언적으로 다루고 싶다
+
+이런 문제를 해결하기 위해 React 18은 세 가지 핵심 API를 제공합니다.
+
+## 해결 방법
+
+React 18은 Lane 시스템 위에 세 가지 API를 제공해 위 문제를 해결합니다.
+
+1. **useTransition** — setState를 비긴급으로 표시해 입력 응답성 확보
+2. **useDeferredValue** — 값 수준에서 업데이트를 지연해 이전 UI 유지
+3. **Suspense** — 비동기 데이터의 로딩 상태를 선언적으로 처리
+
+이제 각 API의 내부 동작을 Fiber와 Lane 관점에서 살펴보겠습니다.
+
+## useTransition: 비긴급 업데이트 분리
+
+### 동작 원리
+
+<InlineAnnotation term="useTransition">
+  setState를 TransitionLane으로 감싸서, 해당 렌더링이 더 긴급한 업데이트에
+  양보할 수 있게 만드는 훅입니다. isPending 플래그로 transition 진행 상태를 추적합니다.
+</InlineAnnotation>
+은 `startTransition` (06장에서 다뤘던)에 `isPending` 상태를 더한 훅입니다.
+
+아래 코드는 설명용으로 단순화한 의사 코드입니다.
+실제 React 구현에서는 `isPending` 관리가 Fiber 내부 플래그와 연동되어 있으며,
+아래처럼 단순한 `useState`가 아닙니다.
+
+```ts
+function useTransition(): [boolean, (callback: () => void) => void] {
+  const [isPending, setIsPending] = useState(false);
+
+  function startTransitionHook(callback: () => void): void {
+    // 1. isPending을 SyncLane으로 즉시 true 설정
+    setIsPending(true);
+
+    // 2. callback 안의 setState는 TransitionLane으로 스케줄링
+    startTransition(() => {
+      callback();
+      // 3. transition 렌더가 완료되면 React가 isPending을 false로 되돌림
+      // (Fiber 내부에서 자동 처리 — 여기서는 개념적으로만 표시)
+    });
+  }
+
+  return [isPending, startTransitionHook];
+}
+```
+
+핵심 포인트:
+
+- `setIsPending(true)`는 SyncLane으로 즉시 반영된다 → UI에 로딩 인디케이터를 바로 표시할 수 있다
+- `callback` 안의 `setState`는 TransitionLane을 받는다 → 긴급 업데이트에 양보할 수 있다
+- transition 렌더링이 완료되면 `isPending`이 자동으로 `false`가 된다
+
+### 타임라인으로 보는 Lane 분리
+
+```
+사용자 타이핑 ─→ setQuery (SyncLane)
+                 ├─ 즉시 렌더 → isPending=true, 입력 반영 → 화면 업데이트
+                 │
+                 └─ startTransition → setFiltered (TransitionLane)
+                    ├─ 양보 (긴급 작업이 있으면 대기)
+                    ├─ 양보
+                    └─ 렌더 완료 → isPending=false → 화면 업데이트
+```
+
+SyncLane 렌더가 먼저 완료되어 입력이 즉시 반영되고,
+TransitionLane 렌더는 브라우저에 여유가 있을 때 처리됩니다.
+
+### 실무 적용 패턴
+
+```tsx
+function SearchPage({ items }: { items: Item[] }) {
+  const [query, setQuery] = useState("");
+  const [filtered, setFiltered] = useState(items);
+  const [isPending, startTransition] = useTransition();
+
+  function handleChange(value: string) {
+    setQuery(value); // 긴급: 입력 즉시 반영 (SyncLane)
+
+    startTransition(() => {
+      // 비긴급: 무거운 필터링 (TransitionLane)
+      setFiltered(items.filter((item) => expensiveMatch(item, value)));
+    });
+  }
+
+  return (
+    <>
+      <input value={query} onChange={(e) => handleChange(e.target.value)} />
+      {isPending && <Spinner />}
+      <ResultList items={filtered} />
+    </>
+  );
+}
+```
+
+<div className="rf-callout">
+  <strong>핵심 포인트</strong>
+  <p className="rf-small">
+    useTransition은 "이 업데이트는 긴급하지 않다"는 힌트를 React에 전달하는 것입니다.
+    입력 반영(SyncLane)과 검색 결과 계산(TransitionLane)을 분리해,
+    타이핑 끊김 없이 무거운 계산을 처리할 수 있습니다.
+  </p>
+</div>
+
+## useDeferredValue: 값 수준의 우선순위 분리
+
+### 동작 원리
+
+<InlineAnnotation term="useDeferredValue">
+  값의 업데이트를 지연시켜, 긴급 렌더링에서는 이전 값을 사용하고
+  비긴급 렌더링에서 새 값으로 업데이트하는 훅입니다.
+  내부적으로 두 번의 렌더링을 트리거합니다.
+</InlineAnnotation>
+은 `useTransition`과 달리 "상태를 분리하는" 것이 아니라, **값 자체를 지연시키는** 접근입니다.
+
+아래는 설명용으로 단순화한 의사 코드입니다.
+실제 구현에서는 `useEffect` 대신 Fiber 내부 메커니즘으로 직접 처리합니다.
+
+```ts
+function useDeferredValue<T>(value: T): T {
+  const [deferredValue, setDeferredValue] = useState(value);
+
+  useEffect(() => {
+    // 새 값이 들어오면 TransitionLane으로 업데이트를 스케줄링
+    startTransition(() => {
+      setDeferredValue(value);
+    });
+  }, [value]);
+
+  return deferredValue;
+}
+```
+
+### useTransition vs useDeferredValue
+
+| 항목 | useTransition | useDeferredValue |
+| --- | --- | --- |
+| 제어 대상 | setState 호출 | 값(value) |
+| 사용 시점 | setState를 직접 감쌀 수 있을 때 | props로 받은 값을 지연시킬 때 |
+| isPending | 제공 (로딩 UI 표시 가능) | 미제공 (이전 값/새 값 비교로 판단) |
+| 리렌더링 횟수 | 최소 2회 (isPending 반영 + transition 완료) | 2회 (즉시 렌더 + 지연 렌더) |
+| 전형적 사용처 | 검색/필터링 업데이트 | 부모에서 받은 props 지연 |
+
+### 실무 적용 패턴
+
+```tsx
+function AutoComplete({ searchResults }: { searchResults: Result[] }) {
+  // 부모가 전달하는 searchResults는 매 타이핑마다 바뀜
+  // 하지만 리스트 렌더링은 비용이 크므로 지연 처리
+  const deferredResults = useDeferredValue(searchResults);
+
+  // 이전 값과 다르면 로딩 상태 표시
+  const isStale = deferredResults !== searchResults;
+
+  return (
+    <div style={{ opacity: isStale ? 0.6 : 1 }}>
+      <ResultList items={deferredResults} />
+    </div>
+  );
+}
+```
+
+## Suspense: 선언적 비동기 처리
+
+### 동작 원리
+
+<InlineAnnotation term="Suspense">
+  비동기 데이터를 기다리는 동안 fallback UI를 자동으로 표시하는 컴포넌트입니다.
+  Fiber 트리에서 Suspense boundary 역할을 하며, 하위 컴포넌트가 "아직 준비 안 됨" 신호를
+  던지면 이를 캐치해 fallback을 렌더링합니다.
+</InlineAnnotation>
+는 Fiber 트리에서 특별한 역할을 합니다.
+
+일반적으로 `throw`는 에러를 던지는 데 사용하지만, Suspense는 **Promise 객체를 throw**해
+"아직 데이터가 준비되지 않았다"는 신호를 보냅니다.
+이 비표준적 패턴을 이해하면 아래 의사 코드를 쉽게 따라갈 수 있습니다.
+
+```ts
+// Suspense의 Fiber 처리 흐름 (의사 코드)
+function updateSuspenseComponent(
+  current: FiberNode | null,
+  workInProgress: FiberNode,
+  renderLanes: Lanes
+): FiberNode | null {
+  const nextProps = workInProgress.pendingProps;
+
+  // 1. 자식 렌더링 시도
+  try {
+    const primaryChild = renderChildFibers(workInProgress, nextProps.children);
+    return primaryChild;
+  } catch (thrownValue) {
+    // 2. Promise가 throw되면 "아직 준비 안 됨" 상태
+    if (isThenable(thrownValue)) {
+      // 3. fallback Fiber를 생성해 대신 렌더링
+      const fallbackChild = createFiberFromFragment(nextProps.fallback);
+      fallbackChild.return = workInProgress;
+
+      // 4. Promise가 resolve되면 재렌더링 스케줄링
+      thrownValue.then(() => {
+        // resolve 시 해당 Suspense boundary를 다시 렌더
+        scheduleUpdateOnFiber(workInProgress, DefaultLane);
+      });
+
+      return fallbackChild;
+    }
+
+    throw thrownValue; // Promise가 아닌 에러는 그대로 전파
+  }
+}
+```
+
+### Suspense와 Fiber 트리
+
+```
+정상 상태:
+  App
+  ├── Header
+  └── Suspense (boundary)
+      └── DataComponent ← 데이터 로딩 완료
+
+로딩 상태:
+  App
+  ├── Header
+  └── Suspense (boundary)
+      └── Spinner (fallback) ← DataComponent가 Promise를 throw
+```
+
+Suspense boundary는 Fiber 트리에서 "에러 경계(Error Boundary)"와 유사한 캐치 메커니즘을 사용합니다.
+차이점은 에러 대신 Promise를 캐치한다는 것입니다.
+
+### 중첩 Suspense 패턴
+
+```tsx
+<Suspense fallback={<PageSkeleton />}>
+  <Header />
+  <Suspense fallback={<ContentSpinner />}>
+    <MainContent />  {/* 무거운 데이터 */}
+  </Suspense>
+  <Suspense fallback={<SidebarSkeleton />}>
+    <Sidebar />  {/* 별도 데이터 */}
+  </Suspense>
+</Suspense>
+```
+
+중첩 Suspense의 장점:
+
+- 각 boundary가 독립적으로 fallback을 관리한다
+- `MainContent`가 로딩 중이어도 `Sidebar`는 별도로 로딩/표시될 수 있다
+- 가장 바깥 Suspense는 전체 페이지의 최종 안전망 역할을 한다
+
+<div className="rf-callout">
+  <strong>핵심 포인트</strong>
+  <p className="rf-small">
+    Suspense는 "데이터가 준비되면 보여주고, 아니면 대기 UI를 보여달라"는
+    선언적 의도를 표현합니다. 명령형 로딩 상태 관리(isLoading, setLoading)를
+    Fiber 레벨의 자동 처리로 대체합니다.
+  </p>
+</div>
+
+## 세 API의 Lane 활용 비교
+
+| API | 부여하는 Lane | Fiber 레벨 동작 | 개발자 의도 |
+| --- | --- | --- | --- |
+| `useTransition` | TransitionLane | 긴급 렌더 먼저, transition 렌더는 양보 가능 | "이 setState는 급하지 않다" |
+| `useDeferredValue` | TransitionLane | 즉시 렌더(이전 값) + 지연 렌더(새 값) | "이 값은 늦게 반영돼도 된다" |
+| `Suspense` | DefaultLane → retry | Promise catch → fallback → resolve 시 재렌더 | "데이터 준비될 때까지 대기 UI를 보여라" |
+
+## 실습 예제 (코드리뷰형)
+
+### 시나리오
+
+대시보드 페이지에서 필터 변경 시 세 가지 위젯(차트, 테이블, 통계)이 동시에 업데이트됩니다.
+필터 UI는 즉시 반응해야 하지만, 위젯 재계산은 무거워서 전체 페이지가 멈추는 현상이 발생합니다.
+
+```tsx
+function Dashboard({ data }: { data: DashboardData }) {
+  const [filters, setFilters] = useState(defaultFilters);
+
+  const chartData = useMemo(() => computeChart(data, filters), [data, filters]);
+  const tableData = useMemo(() => computeTable(data, filters), [data, filters]);
+  const statsData = useMemo(() => computeStats(data, filters), [data, filters]);
+
+  return (
+    <>
+      <FilterBar
+        filters={filters}
+        onChange={(next) => setFilters(next)}
+      />
+      <Chart data={chartData} />
+      <DataTable data={tableData} />
+      <Stats data={statsData} />
+    </>
+  );
+}
+```
+
+### 질문
+
+1. 이 코드에서 모든 `useMemo`가 같은 Lane에서 실행되는 이유는 무엇인가?
+2. `useTransition`을 적용해 필터 UI와 위젯 업데이트를 분리하려면 어떻게 수정하는가?
+3. `useDeferredValue`를 사용하는 방식은 어떻게 다른가? 어떤 상황에서 더 적합한가?
+
+### 답안 체크리스트
+
+- [ ] 단일 `setFilters`가 트리거하는 렌더에서 모든 `useMemo`가 동일 Lane으로 재계산된다고 설명했다.
+- [ ] `startTransition(() => setFilters(next))`로 위젯 렌더링을 TransitionLane으로 분리하는 방법을 제시했다.
+- [ ] `useDeferredValue(filters)`를 위젯에 전달하는 대안을 설명하고, props 기반 지연이 필요한 경우에 적합하다고 구분했다.
+- [ ] 필터 UI의 즉시 반응성과 위젯의 점진적 업데이트가 양립하는 구조를 제시했다.
+
+## Source Map
+
+<SourceMapTable entries={[
+  {
+    modulePath: "packages/react/src/ReactHooks.js",
+    symbols: ["useTransition", "useDeferredValue"],
+    whyItMatters: "훅 API의 진입점 — 내부적으로 dispatcher를 통해 Fiber 구현으로 연결",
+    readHint: "각 훅이 어떤 dispatcher 메서드를 호출하는지 추적하면 mount/update 분기를 이해할 수 있다"
+  },
+  {
+    modulePath: "packages/react-reconciler/src/ReactFiberHooks.js",
+    symbols: ["mountTransition", "updateTransition", "mountDeferredValue", "updateDeferredValue"],
+    whyItMatters: "useTransition과 useDeferredValue의 Fiber 레벨 구현",
+    readHint: "mountTransition에서 isPending 상태가 어떻게 초기화되는지, updateDeferredValue에서 이전 값 비교 로직을 확인"
+  },
+  {
+    modulePath: "packages/react-reconciler/src/ReactFiberSuspenseComponent.js",
+    symbols: ["updateSuspenseComponent", "mountSuspenseFallbackChildren"],
+    whyItMatters: "Suspense boundary의 Fiber 처리 로직",
+    readHint: "throw된 Promise를 어떻게 캐치하고 fallback Fiber를 생성하는지 추적"
+  }
+]} />
+
+## 오해 바로잡기
+
+1. **"useTransition을 쓰면 계산이 빨라진다"**
+   - 아니다. 총 계산량은 동일하다. 차이는 계산 타이밍이다. 긴급 업데이트를 먼저 처리해 체감 응답성을 높이는 것이지, 계산 자체를 최적화하지 않는다.
+
+2. **"useDeferredValue는 debounce와 같다"**
+   - 아니다. debounce는 고정 시간 지연이고, `useDeferredValue`는 React의 스케줄링에 따라 유동적으로 지연된다. 브라우저가 바쁘면 더 오래 지연되고, 여유가 있으면 거의 즉시 반영된다.
+
+3. **"Suspense는 데이터 fetching 라이브러리 없이도 동작한다"**
+   - Suspense 자체는 Promise를 throw하는 패턴에 반응하므로 fetching 라이브러리 없이도 기술적으로 가능하지만, 실무에서는 캐싱과 중복 요청 방지를 위해 React Query, SWR 등의 라이브러리와 함께 사용하는 것이 권장된다.
+
+## 요약 체크리스트
+
+- [ ] useTransition이 Lane을 활용해 렌더링을 분리하는 메커니즘을 설명할 수 있다.
+- [ ] useDeferredValue가 이전 값을 유지하며 낮은 우선순위로 재렌더링하는 방식을 설명할 수 있다.
+- [ ] Suspense가 Fiber 트리에서 fallback을 처리하는 방식을 설명할 수 있다.
+- [ ] 실무 성능 최적화에 Concurrent Features를 적절히 적용할 수 있다.
+
+## 다음 장 예고: 디버깅과 현대 React
+
+이 장에서 Concurrent Features의 내부 동작을 이해했으니,
+마지막 장에서는 이 지식을 실무 디버깅과 최신 React 기능에 연결합니다.
+
+- React DevTools Profiler 데이터를 Fiber 관점으로 해석하는 방법
+- Server Components가 Fiber 아키텍처 위에서 동작하는 방식
+- Streaming SSR에서 Suspense의 역할과 Hydration 과정
