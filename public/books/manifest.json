@@ -60,42 +60,42 @@
     "title": "Ch.12 전체 챕터 누락 문항 재점검"
   },
   {
-    "id": "react-hard-1",
+    "id": "01-why-fiber",
     "filename": "01-why-fiber.mdx",
     "title": "Ch.1 why fiber"
   },
   {
-    "id": "react-hard-2",
+    "id": "02-browser-scheduler",
     "filename": "02-browser-scheduler.mdx",
     "title": "Ch.2 browser scheduler"
   },
   {
-    "id": "react-hard-3",
+    "id": "03-fiber-node-structure",
     "filename": "03-fiber-node-structure.mdx",
     "title": "Ch.3 fiber node structure"
   },
   {
-    "id": "react-hard-4",
+    "id": "04-render-commit-double-buffering",
     "filename": "04-render-commit-double-buffering.mdx",
     "title": "Ch.4 render commit double buffering"
   },
   {
-    "id": "react-hard-5",
+    "id": "05-reconciliation",
     "filename": "05-reconciliation.mdx",
     "title": "Ch.5 reconciliation"
   },
   {
-    "id": "react-hard-6",
+    "id": "06-priority-and-lanes",
     "filename": "06-priority-and-lanes.mdx",
     "title": "Ch.6 priority and lanes"
   },
   {
-    "id": "react-hard-7",
+    "id": "07-concurrent-features",
     "filename": "07-concurrent-features.mdx",
     "title": "Ch.7 concurrent features"
   },
   {
-    "id": "react-hard-8",
+    "id": "08-debugging-and-modern-react",
     "filename": "08-debugging-and-modern-react.mdx",
     "title": "Ch.8 debugging and modern react"
   },
