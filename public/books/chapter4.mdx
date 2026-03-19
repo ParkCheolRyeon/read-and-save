@@ -30,6 +30,7 @@ TypeScript의 핵심 가치는 단순 편의성이 아니라,
 - TypeScript는 자바스크립트 위에 얹힌 **정적 타입 시스템**이다.
 - 런타임 전에 코드의 형태와 제약을 검사할 수 있게 해준다.
 - 특히 함수 인자, 반환값, 객체 구조, 공용 API의 계약을 더 명확하게 표현할 수 있다.
+- 컴파일 결과물은 순수 자바스크립트이며, 타입 정보는 런타임에 완전히 사라진다.
 
 ### 왜 이게 중요한가
 
@@ -45,10 +46,10 @@ TypeScript는 이 문제를 전부 없애주지는 않지만,
 
 ### 자주 하는 오해
 
-- TypeScript를 쓰면 버그가 사라진다 → 틀림
-- TypeScript는 개발 속도를 무조건 느리게 만든다 → 상황에 따라 다르다
+- TypeScript를 쓰면 버그가 사라진다 → 틀림. 타입 수준의 실수를 줄여줄 뿐, 로직 버그는 여전히 발생한다
+- TypeScript는 개발 속도를 무조건 느리게 만든다 → 상황에 따라 다르다. 초기에는 느려질 수 있지만 프로젝트가 커질수록 리팩토링 안정성으로 시간을 절약한다
 - 자동완성이 좋아지는 게 핵심이다 → 핵심은 계약 명시와 리팩토링 안정성이다
-- TypeScript를 쓰면 런타임 검증도 필요 없다 → 틀림
+- TypeScript를 쓰면 런타임 검증도 필요 없다 → 틀림. 이 챕터 후반부에서 자세히 다룬다
 
 ### 실무 연결
 
@@ -62,13 +63,7 @@ TypeScript는 이 문제를 전부 없애주지는 않지만,
 
 같은 지점에서 TypeScript 이점이 크다.
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-TypeScript를 쓰는 이유를 알았다면, 이제 자연스럽게 이런 질문이 나온다.
-
-**그 계약을 어떤 문법으로 표현할 것인가?**
-
-그래서 다음은 `type`과 `interface`로 넘어간다.
+> TypeScript를 쓰는 이유를 알았다면, 이제 자연스럽게 **그 계약을 어떤 문법으로 표현할 것인가?**라는 질문이 나온다. 그래서 다음은 `type`과 `interface`로 넘어간다.
 
 ### 면접 압축 답변
 
@@ -88,13 +83,30 @@ TypeScript를 쓰기 시작하면 가장 먼저 자주 맞닥뜨리는 질문이
 #### `interface`
 
 - 객체 형태의 계약을 표현하는 데 자연스럽다
-- 선언 병합이 가능하다
-- 클래스 구현 계약과도 잘 어울린다
+- **선언 병합(declaration merging)**이 가능하다 — 같은 이름으로 여러 번 선언하면 자동으로 합쳐진다
+- 클래스 구현 계약(`implements`)과도 잘 어울린다
+
+```ts
+// 선언 병합 예시 — 라이브러리 타입 확장에 유용
+interface Window {
+  myCustomProperty: string;
+}
+
+// 기존 Window 인터페이스에 myCustomProperty가 추가됨
+```
 
 #### `type`
 
 - 객체뿐 아니라 유니온, 인터섹션, 튜플, 원시 타입 별칭 등 더 넓은 표현이 가능하다
 - 더 “타입 연산” 친화적이다
+- 선언 병합은 안 된다 — 같은 이름으로 두 번 선언하면 에러가 난다
+
+```ts
+// type만 가능한 표현들
+type ID = string | number;                  // 유니온
+type Pair = [string, number];               // 튜플
+type Callback = (value: string) => void;    // 함수 타입 별칭
+```
 
 ### 왜 이게 중요한가
 
@@ -103,7 +115,7 @@ TypeScript를 쓰기 시작하면 가장 먼저 자주 맞닥뜨리는 질문이
 
 ### 자주 하는 오해
 
-- `type`과 `interface`는 완전히 똑같다 → 틀림
+- `type`과 `interface`는 완전히 똑같다 → 틀림. 선언 병합, 유니온 표현 등에서 차이가 있다
 - 무조건 `interface`가 더 좋다 → 틀림
 - 무조건 `type`이 최신이라 더 좋다 → 틀림
 - 둘 중 하나만 써야 일관성 있다 → 팀 기준에 따라 다르지만, 용도 분리가 더 중요할 수 있다
@@ -130,16 +142,11 @@ type UserWithStatus = User & {
 };
 ```
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 “타입을 어떻게 표현하는가”를 봤다.  
-그 다음엔 “안전하지 않은 타입과 안전한 타입은 무엇이 다른가”로 넘어가야 한다.
-
-그래서 다음은 `any`, `unknown`, `never`다.
+> 이제 “타입을 어떻게 표현하는가”를 봤다. 그 다음엔 “안전하지 않은 타입과 안전한 타입은 무엇이 다른가”로 넘어가야 한다. 그래서 다음은 `any`, `unknown`, `never`다.
 
 ### 면접 압축 답변
 
-`interface`는 객체 계약을 표현할 때 자연스럽고, `type`은 유니온이나 인터섹션 같은 타입 조합까지 더 폭넓게 표현할 수 있습니다. 그래서 객체 shape 중심이면 `interface`, 조합형 타입 설계가 많으면 `type`이 더 잘 맞는 경우가 많습니다.
+`interface`는 객체 계약을 표현할 때 자연스럽고 선언 병합이 가능합니다. `type`은 유니온이나 인터섹션 같은 타입 조합까지 더 폭넓게 표현할 수 있습니다. 그래서 객체 shape 중심이면 `interface`, 조합형 타입 설계가 많으면 `type`이 더 잘 맞는 경우가 많습니다.
 
 ---
 
@@ -154,11 +161,24 @@ TypeScript를 도입했는데도 코드가 불안한 경우가 있다.
 
 - 타입 검사를 사실상 꺼버린다
 - 어떤 값이든 들어갈 수 있고, 어떤 연산도 허용된다
+- `any`에서 다른 타입으로 대입해도 에러가 나지 않아서 **오염이 전파**될 수 있다
+
+```ts
+let value: any = "hello";
+let num: number = value; // 에러 없음 — 위험
+num.toFixed(2);          // 런타임에서 문제 없지만, value가 객체였다면?
+```
 
 #### `unknown`
 
 - 어떤 값이 들어올 수 있다는 점은 같지만
 - 사용하기 전에 **타입을 좁히는 과정**이 필요하다
+- 다른 타입에 그냥 대입할 수 없다
+
+```ts
+let value: unknown = "hello";
+let num: number = value; // 에러! — unknown을 number에 바로 넣을 수 없다
+```
 
 ### 왜 이게 중요한가
 
@@ -183,8 +203,8 @@ function logLength(value: any) {
 }
 ```
 
-이 코드는 타입 에러가 안 난다.  
-하지만 런타임에 숫자가 들어오면 바로 깨질 수 있다.
+이 코드는 타입 에러가 안 난다.
+하지만 런타임에 숫자가 들어오면 `undefined`가 출력되고, 메서드를 호출했다면 에러가 터진다.
 
 ```ts
 function logLength(value: unknown) {
@@ -215,18 +235,11 @@ function logLength(value: unknown) {
 이런 값은 내부 코드가 만든 것이 아니므로,  
 처음부터 믿지 않는 게 맞다.
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 “모르는 값”을 안전하게 다루는 필요성이 보였다.  
-그 다음 질문은 자연스럽다.
-
-**그럼 unknown 값을 실제로 쓸 수 있게 만들려면 어떻게 해야 하나?**
-
-여기서 narrowing이 나온다.
+> 이제 “모르는 값”을 안전하게 다루는 필요성이 보였다. 그럼 unknown 값을 실제로 쓸 수 있게 만들려면 어떻게 해야 하나? 여기서 narrowing이 나온다. 하지만 그 전에, “절대 일어나지 않아야 하는 상태”를 표현하는 `never`를 먼저 보자.
 
 ### 면접 압축 답변
 
-`any`는 타입 검사를 사실상 꺼버리기 때문에 TypeScript의 장점을 많이 잃게 만듭니다. 반면 `unknown`은 값이 무엇인지 아직 모른다는 사실을 표현하고, 사용 전에 타입을 확인하게 강제해서 더 안전합니다.
+`any`는 타입 검사를 사실상 꺼버리기 때문에 TypeScript의 장점을 많이 잃게 만듭니다. 특히 `any`는 다른 타입으로 전파되기 쉬워서 오염 범위가 넓어집니다. 반면 `unknown`은 값이 무엇인지 아직 모른다는 사실을 표현하고, 사용 전에 타입을 확인하게 강제해서 더 안전합니다.
 
 ---
 
@@ -244,6 +257,27 @@ function logLength(value: unknown) {
 - 항상 throw만 하는 함수
 - 무한 루프
 - exhaustive check에서 남아선 안 되는 분기
+
+### void와 never의 차이
+
+이 둘을 혼동하는 경우가 많지만, 의미가 완전히 다르다.
+
+- `void`는 **반환값이 없는 것** — 함수는 정상적으로 끝나지만 의미 있는 값을 돌려주지 않는다
+- `never`는 **함수가 정상적으로 끝나지 않는 것** — 항상 예외를 던지거나 무한 루프에 빠진다
+
+```ts
+// void: 정상 종료하지만 반환값 없음
+function logMessage(msg: string): void {
+  console.log(msg);
+  // 여기서 함수가 정상적으로 끝남
+}
+
+// never: 정상 종료 자체가 불가능
+function throwError(msg: string): never {
+  throw new Error(msg);
+  // 여기에 도달할 수 없음
+}
+```
 
 ### 왜 이게 중요한가
 
@@ -279,19 +313,14 @@ function renderStatus(status: Status) {
 ### 자주 하는 오해
 
 - `never`는 거의 안 쓰는 마이너 문법이다 → 실무에서 분기 안정성에 꽤 유용하다
-- `never`는 그냥 `void`와 비슷하다 → 전혀 다르다
-- `never`는 아무 값이나 담을 수 있다 → 오히려 반대다
+- `never`는 그냥 `void`와 비슷하다 → `void`는 반환값 없음, `never`는 반환 자체가 불가능. 전혀 다르다
+- `never`는 아무 값이나 담을 수 있다 → 오히려 반대다. 어떤 값도 `never`에 대입할 수 없다
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-`unknown`과 `never`를 봤으니,  
-이제 “모르는 값을 어떻게 점점 더 구체적으로 바꿔 가는가”를 봐야 한다.
-
-즉 narrowing으로 넘어간다.
+> `unknown`과 `never`를 봤으니, 이제 “모르는 값을 어떻게 점점 더 구체적으로 바꿔 가는가”를 봐야 한다. 즉 narrowing으로 넘어간다.
 
 ### 면접 압축 답변
 
-`never`는 절대 발생하면 안 되는 상태나 도달할 수 없는 분기를 표현하는 데 사용됩니다. 특히 유니온 타입을 switch로 분기할 때 exhaustive check에 활용하면, 새로운 케이스를 빠뜨렸을 때 컴파일 단계에서 더 빨리 잡아낼 수 있습니다.
+`never`는 절대 발생하면 안 되는 상태나 도달할 수 없는 분기를 표현하는 데 사용됩니다. `void`가 반환값 없음을 뜻한다면, `never`는 반환 자체가 불가능하다는 뜻입니다. 특히 유니온 타입을 switch로 분기할 때 exhaustive check에 활용하면, 새로운 케이스를 빠뜨렸을 때 컴파일 단계에서 더 빨리 잡아낼 수 있습니다.
 
 ---
 
@@ -331,29 +360,55 @@ function printValue(value: string | number) {
 
 이런 곳에서 narrowing이 없으면 타입 시스템이 너무 불편하게 느껴진다.
 
+### narrowing을 만드는 대표 수단
+
+- `typeof` — 원시 타입 구분
+- `instanceof` — 클래스 인스턴스 구분
+- `in` — 특정 속성 존재 여부
+- truthy/falsy 검사 — null/undefined 걸러내기
+- equality check — 특정 값 비교
+- **사용자 정의 타입 가드** — 복잡한 조건을 재사용 가능한 형태로 추출
+
+### 사용자 정의 타입 가드 예시
+
+복잡한 narrowing 조건이 반복될 때 타입 가드 함수로 추출할 수 있다.
+
+```ts
+interface Cat {
+  meow: () => void;
+}
+
+interface Dog {
+  bark: () => void;
+}
+
+// 반환 타입 `animal is Cat`이 핵심 — TypeScript에 narrowing 힌트를 준다
+function isCat(animal: Cat | Dog): animal is Cat {
+  return "meow" in animal;
+}
+
+function handleAnimal(animal: Cat | Dog) {
+  if (isCat(animal)) {
+    animal.meow(); // Cat으로 좁혀짐
+  } else {
+    animal.bark(); // Dog으로 좁혀짐
+  }
+}
+```
+
+`is` 키워드가 없으면 TypeScript는 함수의 boolean 반환값만으로는 타입을 좁힐 수 없다.
+
 ### 자주 하는 오해
 
 - TypeScript는 선언만 잘하면 끝이다 → 틀림. 흐름 속 타입 좁히기가 더 중요할 때가 많다
-- `as`로 강제 캐스팅하면 narrowing 대신 써도 된다 → 위험하다
+- `as`로 강제 캐스팅하면 narrowing 대신 써도 된다 → 위험하다. `as`는 TypeScript에게 "내가 맞으니 믿어라"고 강요하는 것이다
 - 런타임 조건과 타입 시스템은 별개다 → TypeScript는 제어 흐름을 읽어 타입을 좁힌다
 
-### narrowing을 만드는 대표 수단
-
-- `typeof`
-- `instanceof`
-- `in`
-- truthy/falsy 검사
-- equality check
-- 사용자 정의 타입 가드
-
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 narrowing이 왜 중요한지는 보였다.  
-그 다음엔 넓은 타입을 더 세밀하게 다룰 때 자주 붙는 **유니온과 인터섹션**으로 넘어가야 한다.
+> 이제 narrowing이 왜 중요한지는 보였다. 그 다음엔 넓은 타입을 더 세밀하게 다룰 때 자주 붙는 **유니온과 인터섹션**으로 넘어간다.
 
 ### 면접 압축 답변
 
-Narrowing은 넓은 타입을 조건 검사와 제어 흐름을 통해 더 구체적인 타입으로 좁혀 가는 과정입니다. TypeScript를 실무에서 잘 쓰려면 선언 자체보다도 이런 흐름 속 타입 좁히기를 잘 다루는 게 더 중요합니다.
+Narrowing은 넓은 타입을 조건 검사와 제어 흐름을 통해 더 구체적인 타입으로 좁혀 가는 과정입니다. `typeof`, `instanceof`, `in`, 사용자 정의 타입 가드 등을 통해 가능하며, TypeScript를 실무에서 잘 쓰려면 선언 자체보다도 이런 흐름 속 타입 좁히기를 잘 다루는 게 더 중요합니다.
 
 ---
 
@@ -371,6 +426,8 @@ TypeScript에서 타입 설계를 시작하면 곧바로 만나는 게 유니온
 type InputValue = string | number;
 ```
 
+유니온 타입의 값을 사용할 때는, 모든 멤버에 공통으로 있는 속성만 바로 쓸 수 있다. 특정 멤버의 속성을 쓰려면 narrowing이 먼저 필요하다.
+
 #### 인터섹션 `&`
 
 “여러 속성을 동시에 모두 만족하는 것”을 표현한다.
@@ -380,6 +437,7 @@ type BaseUser = { id: string; name: string };
 type WithRole = { role: "admin" | "user" };
 
 type User = BaseUser & WithRole;
+// User는 id, name, role 모두 있어야 함
 ```
 
 ### 왜 이게 중요한가
@@ -394,12 +452,12 @@ type User = BaseUser & WithRole;
 ### 자주 하는 오해
 
 - 유니온은 타입 여러 개를 다 합치는 거다 → “그중 하나”에 더 가깝다
-- 인터섹션은 겹치는 속성만 남긴다 → 집합 개념을 기계적으로 대입하면 헷갈린다
+- 인터섹션은 겹치는 속성만 남긴다 → 오히려 반대다. 모든 속성을 동시에 가져야 한다. 집합 이론의 "교집합"과 혼동하기 쉬운데, 타입 관점에서는 "모든 제약을 동시에 만족"이라고 생각해야 한다
 - 유니온이면 모든 멤버의 속성을 바로 쓸 수 있다 → narrowing이 먼저 필요할 수 있다
 
-### 실무 연결
+### 실무 연결: 태그드 유니온
 
-예를 들어 네트워크 상태를 이렇게 모델링하면 설명력이 좋아진다.
+네트워크 상태를 이렇게 모델링하면 설명력이 좋아진다.
 
 ```ts
 type RequestState =
@@ -407,18 +465,28 @@ type RequestState =
   | { status: "loading" }
   | { status: "success"; data: string[] }
   | { status: "error"; message: string };
+
+function renderState(state: RequestState) {
+  switch (state.status) {
+    case "idle":
+      return "대기 중";
+    case "loading":
+      return "로딩 중...";
+    case "success":
+      return state.data.join(", "); // data 접근 가능
+    case "error":
+      return `에러: ${state.message}`; // message 접근 가능
+  }
+}
 ```
 
-이런 형태는 그냥 `loading: boolean`, `error: string | null`, `data: string[] | null`처럼 흩어진 상태보다 훨씬 의미가 명확하다.
+이런 형태는 `loading: boolean`, `error: string | null`, `data: string[] | null`처럼 흩어진 상태보다 훨씬 의미가 명확하다. `status` 필드가 discriminant(판별자) 역할을 하기 때문에 TypeScript가 각 분기에서 타입을 자동으로 좁혀준다.
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 타입을 조합하는 감각이 생겼다.  
-그 다음엔 반복되는 구조를 재사용 가능하게 만드는 **제네릭**으로 넘어가야 한다.
+> 이제 타입을 조합하는 감각이 생겼다. 그 다음엔 반복되는 구조를 재사용 가능하게 만드는 **제네릭**으로 넘어간다.
 
 ### 면접 압축 답변
 
-유니온은 여러 가능성 중 하나를 표현하고, 인터섹션은 여러 속성을 동시에 만족하는 타입을 표현합니다. 실무에서는 상태 모델링이나 공용 props 설계, API 성공/실패 구조를 더 명확하게 표현할 때 유용합니다.
+유니온은 여러 가능성 중 하나를 표현하고, 인터섹션은 여러 속성을 동시에 만족하는 타입을 표현합니다. 실무에서는 태그드 유니온으로 상태를 모델링하거나, 인터섹션으로 공용 props를 조합하는 데 자주 쓰입니다. 유니온의 특정 멤버 속성을 쓰려면 narrowing이 먼저 필요합니다.
 
 ---
 
@@ -442,9 +510,13 @@ type RequestState =
 function identity<T>(value: T): T {
   return value;
 }
+
+const str = identity("hello"); // T = string, 반환 타입도 string
+const num = identity(42);      // T = number, 반환 타입도 number
 ```
 
 이 함수는 문자열이 들어오면 문자열을, 숫자가 들어오면 숫자를 그대로 보존한다.
+타입을 명시적으로 넣을 수도 있고, TypeScript가 인자에서 추론해주기도 한다.
 
 ### 왜 이게 중요한가
 
@@ -483,20 +555,19 @@ async function fetchJson<T>(url: string): Promise<ApiResponse<T>> {
   const response = await fetch(url);
   return response.json();
 }
+
+// 사용 시 — T에 구체 타입을 넣으면 반환 타입이 결정됨
+const result = await fetchJson<User[]>("/api/users");
+// result.data는 User[] 타입
 ```
 
 ### 자주 하는 오해
 
-- 제네릭은 라이브러리 만드는 사람만 쓴다 → 틀림
+- 제네릭은 라이브러리 만드는 사람만 쓴다 → 틀림. 공용 컴포넌트나 훅을 만들 때 자주 필요하다
 - 제네릭은 복잡해서 피하는 게 낫다 → 너무 피하면 `any`와 중복 코드가 늘어난다
 - `<T>`는 무조건 아무 타입이나 받는 마법이다 → 제약 조건을 줄 수도 있다
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 제네릭이 왜 필요한지는 알았다.  
-그 다음엔 “제네릭도 아무 타입이나 받게 두는 게 아니라, 제한을 걸 수 있어야 한다”는 점으로 넘어가야 한다.
-
-즉 extends와 제약 조건으로 이어진다.
+> 이제 제네릭이 왜 필요한지는 알았다. 그 다음엔 “제네릭도 아무 타입이나 받게 두는 게 아니라, 제한을 걸 수 있어야 한다”는 점으로 넘어간다. 즉 `extends`와 제약 조건이다.
 
 ### 면접 압축 답변
 
@@ -519,6 +590,10 @@ async function fetchJson<T>(url: string): Promise<ApiResponse<T>> {
 function getLength<T extends { length: number }>(value: T) {
   return value.length;
 }
+
+getLength("hello");    // OK — string에는 length가 있다
+getLength([1, 2, 3]);  // OK — 배열에도 length가 있다
+getLength(42);         // 에러! — number에는 length가 없다
 ```
 
 이 함수는 `length`가 있는 값만 받을 수 있다.
@@ -530,7 +605,19 @@ function getLength<T extends { length: number }>(value: T) {
 
 ### 실무 연결
 
-- `id`가 있는 데이터 목록
+```ts
+// id가 있는 데이터 목록에서 특정 id를 찾는 함수
+function findById<T extends { id: string }>(items: T[], id: string): T | undefined {
+  return items.find((item) => item.id === id);
+}
+
+// User, Product, Order 등 id만 있으면 어떤 타입이든 사용 가능
+const user = findById(users, "abc123");
+const product = findById(products, "prod-1");
+```
+
+이 외에도:
+
 - `value`/`label` 구조를 가진 옵션
 - key 기반 테이블 컬럼
 - 특정 shape가 보장되어야 하는 훅 반환값
@@ -540,12 +627,9 @@ function getLength<T extends { length: number }>(value: T) {
 ### 자주 하는 오해
 
 - 제네릭은 항상 완전 자유 타입이어야 한다 → 틀림
-- `extends`는 상속 개념이랑 완전히 동일하다 → 타입 제약으로 이해하는 게 더 실무적이다
+- `extends`는 클래스 상속 개념이랑 완전히 동일하다 → 제네릭에서의 `extends`는 "이 조건을 만족하는 타입"이라는 제약으로 이해하는 게 더 실무적이다
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 재사용 가능한 타입 구조를 더 잘 만들 수 있게 됐다.  
-그 다음엔 이런 타입을 더 편하게 다루는 도구인 `keyof`, `typeof`, `in`, 그리고 유틸리티 타입으로 넘어가야 한다.
+> 이제 재사용 가능한 타입 구조를 더 잘 만들 수 있게 됐다. 그 다음엔 이런 타입을 더 편하게 다루는 도구인 `keyof`, `typeof`, `in`, 그리고 유틸리티 타입으로 넘어간다.
 
 ### 면접 압축 답변
 
@@ -573,7 +657,7 @@ type User = {
 type UserKey = keyof User; // "id" | "name"
 ```
 
-#### `typeof`
+#### `typeof` (타입 문맥)
 
 값으로부터 타입을 추론해 가져온다.
 
@@ -584,16 +668,31 @@ const defaultUser = {
 };
 
 type DefaultUser = typeof defaultUser;
+// { id: string; name: string }
 ```
 
-#### `in`
+여기서 주의할 점: 자바스크립트 런타임의 `typeof`는 `"string"`, `"number"` 같은 문자열을 반환하는 연산자이고, TypeScript의 `typeof`는 **타입 문맥에서** 변수의 타입 자체를 가져오는 키워드다. 이름은 같지만 쓰이는 위치와 역할이 다르다.
 
-매핑된 타입에서 key를 순회할 때 자주 사용한다.
+```ts
+// 런타임 typeof — 문자열 반환
+if (typeof value === "string") { ... }
+
+// 타입 문맥 typeof — 타입 추출
+type Config = typeof defaultConfig;
+```
+
+#### `in` (매핑된 타입)
+
+매핑된 타입에서 key를 순회할 때 사용한다.
 
 ```ts
 type Flags<T> = {
   [K in keyof T]: boolean;
 };
+
+// 사용 예
+type UserFlags = Flags<User>;
+// { id: boolean; name: boolean }
 ```
 
 ### 왜 이게 중요한가
@@ -606,18 +705,15 @@ type Flags<T> = {
 
 ### 자주 하는 오해
 
-- 타입은 항상 수동으로 일일이 적어야 한다 → 틀림
-- `typeof`는 런타임 자바스크립트 `typeof`와 완전히 같은 개념이다 → 문맥이 다르다
-- `keyof`는 객체 값을 뽑는다 → key 이름을 뽑는다
+- 타입은 항상 수동으로 일일이 적어야 한다 → 틀림. 기존 값이나 타입에서 끌어올 수 있다
+- `typeof`는 런타임 자바스크립트 `typeof`와 완전히 같은 개념이다 → 이름은 같지만 타입 문맥과 값 문맥에서 역할이 다르다
+- `keyof`는 객체 값을 뽑는다 → key 이름(문자열 리터럴 유니온)을 뽑는다
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 타입 조작의 기본 재료를 봤다.  
-그 다음엔 실무에서 아주 자주 쓰는 **유틸리티 타입**으로 넘어갈 수 있다.
+> 이제 타입 조작의 기본 재료를 봤다. 그 다음엔 실무에서 아주 자주 쓰는 **유틸리티 타입**으로 넘어간다.
 
 ### 면접 압축 답변
 
-`keyof`, `typeof`, `in`은 기존 타입이나 값에서 정보를 끌어와 재사용 가능한 타입을 만드는 데 자주 쓰입니다. 덕분에 타입 중복을 줄이고, 값과 타입의 일관성을 더 잘 유지할 수 있습니다.
+`keyof`, `typeof`, `in`은 기존 타입이나 값에서 정보를 끌어와 재사용 가능한 타입을 만드는 데 자주 쓰입니다. 덕분에 타입 중복을 줄이고, 값과 타입의 일관성을 더 잘 유지할 수 있습니다. 특히 `typeof`는 런타임 연산자와 이름이 같지만 타입 문맥에서는 변수의 타입 자체를 추출하는 역할입니다.
 
 ---
 
@@ -628,12 +724,12 @@ TypeScript를 쓰다 보면 반복되는 타입 변형 작업이 많다.
 
 ### 자주 쓰는 유틸리티 타입
 
-- `Partial<T>`
-- `Required<T>`
-- `Pick<T, K>`
-- `Omit<T, K>`
-- `Record<K, T>`
-- `Readonly<T>`
+- `Partial<T>` — 모든 속성을 선택적으로
+- `Required<T>` — 모든 속성을 필수로
+- `Pick<T, K>` — 특정 속성만 추출
+- `Omit<T, K>` — 특정 속성만 제외
+- `Record<K, T>` — 키-값 맵 구조
+- `Readonly<T>` — 모든 속성을 읽기 전용으로
 
 ### 왜 이게 중요한가
 
@@ -656,14 +752,22 @@ interface User {
 }
 
 type UserPreview = Pick<User, "id" | "name">;
+// { id: string; name: string }
+
 type UserPatch = Partial<User>;
+// { id?: string; name?: string; age?: number }
+
 type UserMap = Record<string, User>;
+// { [key: string]: User }
+
+type ReadonlyUser = Readonly<User>;
+// { readonly id: string; readonly name: string; readonly age: number }
 ```
 
 ### 자주 하는 오해
 
 - 유틸리티 타입을 많이 쓰면 무조건 고급스럽다 → 과하면 읽기 어려워질 수 있다
-- `Partial`은 폼 수정에 항상 정답이다 → 상태 의미가 불명확해질 수 있다
+- `Partial`은 폼 수정에 항상 정답이다 → 상태 의미가 불명확해질 수 있다. 어떤 필드가 진짜 선택적이고 어떤 필드가 필수인지 구분이 사라지기 때문이다
 - `Omit`은 마음대로 빼도 된다 → 도메인 의미를 흐릴 수 있다
 
 ### 실무 연결
@@ -672,10 +776,7 @@ type UserMap = Record<string, User>;
 즉 “짧아서 좋은 타입”이 아니라,  
 **읽었을 때 의도가 선명한 타입**이 좋은 타입이다.
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-유틸리티 타입까지 보면 타입 조작 감각이 꽤 생긴다.  
-그 다음엔 literal type과 `as const`처럼 값을 더 좁게 고정하는 방식으로 이어질 수 있다.
+> 유틸리티 타입까지 보면 타입 조작 감각이 꽤 생긴다. 그 다음엔 literal type과 `as const`처럼 값을 더 좁게 고정하는 방식으로 이어진다.
 
 ### 면접 압축 답변
 
@@ -700,10 +801,21 @@ TypeScript는 기본적으로 값을 어느 정도 넓게 추론한다.
 예:
 
 ```ts
-const status = "success" as const;
-```
+// as const 없이
+const status = "success";
+// 타입: string (넓은 추론)
 
-이 경우 `status`는 단순 `string`이 아니라 `"success"`라는 더 좁은 타입이 된다.
+// as const 사용
+const status2 = "success" as const;
+// 타입: "success" (좁은 리터럴 타입)
+
+// 배열에서의 차이
+const colors = ["red", "green", "blue"];
+// 타입: string[]
+
+const colors2 = ["red", "green", "blue"] as const;
+// 타입: readonly ["red", "green", "blue"]
+```
 
 ### 왜 이게 중요한가
 
@@ -716,7 +828,7 @@ const status = "success" as const;
 
 ### 자주 하는 오해
 
-- `as const`는 그냥 편하게 쓰는 캐스팅이다 → 단순 캐스팅보다 “값을 더 좁게 고정하는 의도”에 가깝다
+- `as const`는 그냥 편하게 쓰는 캐스팅이다 → 단순 캐스팅보다 “값을 더 좁게 고정하는 의도”에 가깝다. `as`와 이름이 비슷하지만 성격이 다르다
 - `as const`를 남발하면 좋다 → 과하면 타입이 너무 딱딱해질 수 있다
 
 ### 예시
@@ -732,14 +844,7 @@ const REQUEST_STATUS = {
 type RequestStatus = (typeof REQUEST_STATUS)[keyof typeof REQUEST_STATUS];
 ```
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 TypeScript 안에서 내부 계약을 꽤 잘 만들 수 있게 됐다.  
-하지만 중요한 질문이 남는다.
-
-**외부에서 들어오는 값도 TypeScript만으로 안전할까?**
-
-여기서 런타임 검증 필요성으로 넘어간다.
+> 이제 TypeScript 안에서 내부 계약을 꽤 잘 만들 수 있게 됐다. 하지만 중요한 질문이 남는다. **외부에서 들어오는 값도 TypeScript만으로 안전할까?** 여기서 런타임 검증 필요성으로 넘어간다.
 
 ### 면접 압축 답변
 
@@ -754,8 +859,10 @@ type RequestStatus = (typeof REQUEST_STATUS)[keyof typeof REQUEST_STATUS];
 
 ### 핵심 개념
 
-TypeScript는 **컴파일 타임** 도구다.  
+TypeScript는 **컴파일 타임** 도구다.
 즉 개발 중에는 많은 걸 잡아주지만, 실제 런타임에 들어오는 데이터가 정말 그 타입인지까지는 보장하지 못한다.
+
+이유는 간단하다: TypeScript 타입 정보는 **빌드 시점에 완전히 제거**된다. 런타임에는 순수 자바스크립트만 남기 때문에, 타입 선언은 실행 중인 코드에 아무 영향을 주지 못한다.
 
 ### 왜 이게 중요한가
 
@@ -780,12 +887,37 @@ type User = {
 
 async function fetchUser(): Promise<User> {
   const response = await fetch("/api/user");
-  return response.json();
+  return response.json(); // 여기서 실제로 User인지 확인하지 않음
 }
 ```
 
-겉으로는 `Promise<User>`처럼 보이지만,  
+겉으로는 `Promise<User>`처럼 보이지만,
 실제로 서버가 `{ id: 1, nickname: "park" }` 같은 엉뚱한 데이터를 보내도 TypeScript는 런타임에서 막아주지 못한다.
+
+이렇게 하면 **나중에** UI에서 `user.name`이 `undefined`가 되어 화면이 깨지고, 원인을 찾기 어려워진다.
+
+```ts
+// 런타임 검증을 추가한 버전
+async function fetchUser(): Promise<User> {
+  const response = await fetch("/api/user");
+  const data: unknown = await response.json();
+
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "id" in data &&
+    "name" in data &&
+    typeof (data as any).id === "string" &&
+    typeof (data as any).name === "string"
+  ) {
+    return data as User;
+  }
+
+  throw new Error("Invalid user data from API");
+}
+```
+
+이렇게 수동으로 검증할 수도 있지만 번거롭다. 이 문제를 깔끔하게 해결하는 게 Zod다.
 
 ### 자주 하는 오해
 
@@ -798,11 +930,11 @@ async function fetchUser(): Promise<User> {
 즉 TypeScript는 **내부 코드 계약**엔 강하지만,  
 외부 경계는 별도 검증이 필요하다.
 
-이제 여기서 Zod 같은 런타임 검증 도구가 나온다.
+> 이제 여기서 Zod 같은 런타임 검증 도구가 나온다.
 
 ### 면접 압축 답변
 
-TypeScript는 컴파일 타임에 내부 코드 계약을 검사해주지만, 실제 런타임에 외부에서 들어오는 데이터가 정말 그 타입인지까지 보장하지는 못합니다. 그래서 API 응답이나 사용자 입력 같은 경계에서는 별도의 런타임 검증이 필요합니다.
+TypeScript는 컴파일 타임에 내부 코드 계약을 검사해주지만, 타입 정보가 빌드 시 제거되기 때문에 런타임에 외부에서 들어오는 데이터가 정말 그 타입인지까지 보장하지는 못합니다. 그래서 API 응답이나 사용자 입력 같은 경계에서는 별도의 런타임 검증이 필요합니다.
 
 ---
 
@@ -841,18 +973,40 @@ const UserSchema = z.object({
 type User = z.infer<typeof UserSchema>;
 ```
 
-이제 이 스키마를 통해:
+이제 이 스키마를 통해 런타임 검증과 TypeScript 타입 추론 둘 다 가져갈 수 있다.
 
-- 런타임 검증
-- TypeScript 타입 추론
+### 실제 검증 사용법
 
-둘 다 가져갈 수 있다.
+```ts
+// .parse() — 실패하면 예외를 던짐
+async function fetchUser(): Promise<User> {
+  const response = await fetch("/api/user");
+  const data = await response.json();
+  return UserSchema.parse(data); // 검증 실패 시 ZodError throw
+}
+
+// .safeParse() — 예외 없이 결과 객체를 반환
+async function fetchUserSafe() {
+  const response = await fetch("/api/user");
+  const data = await response.json();
+  const result = UserSchema.safeParse(data);
+
+  if (result.success) {
+    return result.data; // 타입: User
+  } else {
+    console.error("검증 실패:", result.error.issues);
+    return null;
+  }
+}
+```
+
+`.safeParse()`는 예외를 던지지 않고 `{ success, data, error }` 형태의 결과를 반환하기 때문에, 에러 핸들링을 더 세밀하게 할 수 있다.
 
 ### 자주 하는 오해
 
 - Zod가 있으면 TypeScript가 필요 없다 → 틀림. 역할이 다르다
 - TypeScript가 있으면 Zod는 중복이다 → 틀림. 검증 시점이 다르다
-- 모든 데이터에 무조건 Zod를 붙여야 한다 → 비용과 중요도를 같이 봐야 한다
+- 모든 데이터에 무조건 Zod를 붙여야 한다 → 비용과 중요도를 같이 봐야 한다. 내부 코드 사이 데이터까지 전부 검증할 필요는 없다
 
 ### 실무 연결
 
@@ -864,14 +1018,11 @@ Zod는 특히 아래 경계에서 강하다.
 - URL search params 파싱
 - localStorage 복원 데이터 검증
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 TypeScript와 Zod가 각자 뭘 담당하는지 구분할 수 있어야 한다.  
-즉 다음은 **정적 계약과 런타임 검증의 역할 분리**로 이어진다.
+> 이제 TypeScript와 Zod가 각자 뭘 담당하는지 구분할 수 있어야 한다. 즉 다음은 **정적 계약과 런타임 검증의 역할 분리**로 이어진다.
 
 ### 면접 압축 답변
 
-Zod는 런타임에서 실제 데이터 구조를 검증하는 도구입니다. TypeScript가 컴파일 타임 계약을 다룬다면, Zod는 외부에서 들어오는 값을 실제로 확인하는 역할을 하므로 둘은 대체 관계가 아니라 보완 관계입니다.
+Zod는 런타임에서 실제 데이터 구조를 검증하는 도구입니다. TypeScript가 컴파일 타임 계약을 다룬다면, Zod는 외부에서 들어오는 값을 실제로 확인하는 역할을 합니다. 또한 `z.infer`로 스키마에서 TypeScript 타입을 추론할 수 있어서 타입 선언과 검증 로직의 괴리를 줄여줍니다.
 
 ---
 
@@ -920,17 +1071,7 @@ Zod는 런타임에서 실제 데이터 구조를 검증하는 도구입니다. 
 3. 통과한 데이터를 내부 모델로 사용
 4. 내부에서는 TypeScript 계약을 기반으로 안전하게 조작
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 타입과 검증의 큰 흐름을 봤다.  
-그 다음엔 이 감각을 실제 프론트엔드 구조에 적용해야 한다.
-
-예를 들면:
-
-- 공용 훅 반환 타입 설계
-- API wrapper 타입 설계
-- 폼 입력 검증 흐름
-- 모노레포에서 타입 공유
+> 이제 타입과 검증의 큰 흐름을 봤다. 남은 두 섹션에서는 이 감각을 구체적인 경계 — API 응답과 폼/URL 파라미터 — 에 적용하는 방법을 본다.
 
 ### 면접 압축 답변
 
@@ -968,25 +1109,49 @@ API 응답은 아래 이유로 항상 기대와 다를 수 있다.
 
 ### 실무 연결
 
-예를 들어:
+원본 응답 DTO와 내부 UI 모델을 분리하는 감각이 중요하다.
 
-- 원본 응답 DTO와
-- 내부 UI 모델을
+```ts
+// 서버 응답 스키마 (외부 경계)
+const UserDTOSchema = z.object({
+  user_id: z.string(),
+  user_name: z.string(),
+  created_at: z.string(),
+});
 
-분리하는 감각이 중요하다.
+// 내부 UI 모델 (내부 계약)
+interface User {
+  id: string;
+  name: string;
+  createdAt: Date;
+}
 
-즉 서버가 주는 shape와,  
-UI가 정말 필요로 하는 shape를 분리하는 것이다.
+// 변환 함수
+function toUser(dto: z.infer<typeof UserDTOSchema>): User {
+  return {
+    id: dto.user_id,
+    name: dto.user_name,
+    createdAt: new Date(dto.created_at),
+  };
+}
+
+// 사용
+async function fetchUser(): Promise<User> {
+  const response = await fetch("/api/user");
+  const data = await response.json();
+  const dto = UserDTOSchema.parse(data); // 경계 검증
+  return toUser(dto); // 내부 모델로 변환
+}
+```
+
+서버가 주는 shape(snake_case, 문자열 날짜 등)와 UI가 정말 필요로 하는 shape(camelCase, Date 객체 등)를 분리하면 코드가 훨씬 깔끔해진다.
 
 ### 자주 하는 오해
 
 - 서버 타입 생성만 받아오면 충분하다 → 실제 응답 신뢰 문제는 여전히 남을 수 있다
 - optional을 많이 붙이면 안전하다 → 오히려 내부 코드가 흐려질 수 있다
 
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-API 응답을 믿지 않는 감각은 자연스럽게  
-**폼 입력 검증**과 **URL/query parameter 파싱**으로도 이어진다.
+> API 응답을 믿지 않는 감각은 자연스럽게 **폼 입력 검증**과 **URL/query parameter 파싱**으로도 이어진다.
 
 ### 면접 압축 답변
 
@@ -1019,8 +1184,32 @@ API 응답은 타입 선언이 있다고 해서 자동으로 안전해지지 않
 - enum처럼 기대한 값이 아닌 임의 문자열이 들어올 수 있고
 - 필수값이 누락될 수 있다
 
-이런 상황은 폼/URL 단계에서 한번 정리해줘야  
+이런 상황은 폼/URL 단계에서 한번 정리해줘야
 이후 로직이 훨씬 단순해진다.
+
+### 예시
+
+```ts
+import { z } from "zod";
+
+// URL search params 검증
+const SearchParamsSchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  sort: z.enum(["name", "date", "price"]).default("date"),
+  q: z.string().optional(),
+});
+
+function parseSearchParams(params: URLSearchParams) {
+  return SearchParamsSchema.parse({
+    page: params.get("page"),
+    sort: params.get("sort"),
+    q: params.get("q"),
+  });
+}
+
+// ?page=abc 같은 잘못된 값이 들어오면 에러
+// ?page=3&sort=date 같은 정상 값은 타입 안전하게 통과
+```
 
 ### 실무 연결
 
@@ -1032,15 +1221,9 @@ API 응답은 타입 선언이 있다고 해서 자동으로 안전해지지 않
 
 ### 자주 하는 오해
 
-- input type이 number면 값도 number다 → DOM input 값은 기본적으로 문자열이다
+- input type이 number면 값도 number다 → DOM input 값은 기본적으로 문자열이다. `<input type="number">`의 `.value`도 문자열이다
 - query param은 우리가 만든 링크니까 안전하다 → 사용자가 직접 수정하거나 공유 링크가 깨질 수 있다
 - 화면 단 validation만 해도 충분하다 → 경계 검증은 별도로 보는 게 좋다
-
-### 여기서 다음 개념으로 어떻게 넘어가나
-
-이제 TypeScript 챕터는 거의 마무리다.  
-다음에는 다시 React 렌더링 모델 쪽으로 올라가서,  
-타입 계약이 실제 컴포넌트 구조 설계와 어떻게 연결되는지를 봐야 한다.
 
 ### 면접 압축 답변
 

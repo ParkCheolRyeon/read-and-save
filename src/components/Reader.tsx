@@ -1,11 +1,10 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { createHighlighter, type Highlighter } from "shiki";
 import { fetchBookContent } from "@/lib/books";
 import type { BookDocument } from "@/lib/books";
 import { isAuthenticated } from "@/lib/auth";
@@ -17,63 +16,81 @@ type ReaderProps = {
   slug: string;
 };
 
-const codeBlockTheme: Record<string, CSSProperties> = {
-  'code[class*="language-"]': {
-    color: "#4d5b7c",
-    background: "#fafafa",
-    fontFamily:
-      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-    fontSize: "0.9rem",
-    lineHeight: "1.75",
-    textShadow: "none",
-    whiteSpace: "pre",
-  },
-  'pre[class*="language-"]': {
-    color: "#4d5b7c",
-    background: "#fafafa",
-    fontFamily:
-      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-    fontSize: "0.9rem",
-    lineHeight: "1.75",
-    textShadow: "none",
-    margin: 0,
-    padding: "1rem 1.125rem",
-    overflow: "auto",
-    borderRadius: "1rem",
-    border: "1px solid #e7eaf3",
-  },
-  comment: { color: "#8f96ad", fontStyle: "italic" },
-  prolog: { color: "#8f96ad" },
-  doctype: { color: "#8f96ad" },
-  cdata: { color: "#8f96ad" },
-  punctuation: { color: "#7a86a6" },
-  namespace: { color: "#7a86a6" },
-  property: { color: "#5d74a8" },
-  tag: { color: "#5d74a8" },
-  boolean: { color: "#7667a8" },
-  number: { color: "#7667a8" },
-  constant: { color: "#6c79b0" },
-  symbol: { color: "#6c79b0" },
-  selector: { color: "#5a73a6" },
-  "attr-name": { color: "#5a73a6" },
-  string: { color: "#6675af" },
-  char: { color: "#6675af" },
-  builtin: { color: "#6675af" },
-  inserted: { color: "#6675af" },
-  operator: { color: "#6f7794" },
-  entity: { color: "#6f7794" },
-  url: { color: "#6f7794" },
-  atrule: { color: "#7d69a8" },
-  "attr-value": { color: "#7d69a8" },
-  keyword: { color: "#7d69a8" },
-  function: { color: "#5a6d9f" },
-  "class-name": { color: "#58659a" },
-  regex: { color: "#5d7aaa" },
-  variable: { color: "#5f6788" },
-  important: { color: "#7d69a8", fontWeight: "600" },
-  bold: { fontWeight: "600" },
-  italic: { fontStyle: "italic" },
-};
+/* ── shiki highlighter singleton ── */
+
+let highlighterPromise: Promise<Highlighter> | null = null;
+
+function getHighlighter(): Promise<Highlighter> {
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighter({
+      themes: ["github-light", "github-dark"],
+      langs: [
+        "javascript",
+        "typescript",
+        "jsx",
+        "tsx",
+        "json",
+        "css",
+        "html",
+        "bash",
+        "shell",
+        "markdown",
+      ],
+    });
+  }
+  return highlighterPromise;
+}
+
+/* ── ShikiCodeBlock ── */
+
+const ShikiCodeBlock = memo(function ShikiCodeBlock({
+  code,
+  lang,
+}: {
+  code: string;
+  lang: string;
+}) {
+  const [html, setHtml] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    getHighlighter().then((h) => {
+      if (cancelled) return;
+      // If the language is not loaded, fall back to plaintext
+      const loadedLangs = h.getLoadedLanguages();
+      const resolvedLang = loadedLangs.includes(lang) ? lang : "text";
+
+      const result = h.codeToHtml(code, {
+        lang: resolvedLang,
+        themes: { light: "github-light", dark: "github-dark" },
+      });
+      setHtml(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, lang]);
+
+  if (!html) {
+    // Fallback while shiki loads
+    return (
+      <div className="shiki-wrapper">
+        <pre className="shiki-fallback">
+          <code>{code}</code>
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="shiki-wrapper"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+});
+
+/* ── Reader ── */
 
 export default function Reader({ slug }: ReaderProps) {
   const router = useRouter();
@@ -211,29 +228,8 @@ export default function Reader({ slug }: ReaderProps) {
                     );
                   }
 
-                  return (
-                    <SyntaxHighlighter
-                      language={match[1]}
-                      style={codeBlockTheme}
-                      PreTag="div"
-                      customStyle={{
-                        background: "#fafafa",
-                        margin: "1.5rem 0",
-                        padding: "1rem 1.125rem",
-                        borderRadius: "1rem",
-                        border: "1px solid #e7eaf3",
-                        boxShadow: "0 1px 2px rgba(74, 85, 120, 0.04)",
-                      }}
-                      codeTagProps={{
-                        style: {
-                          fontFamily:
-                            'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                        },
-                      }}
-                    >
-                      {String(children).replace(/\n$/, "")}
-                    </SyntaxHighlighter>
-                  );
+                  const code = String(children).replace(/\n$/, "");
+                  return <ShikiCodeBlock code={code} lang={match[1]} />;
                 },
                 table: ({ node, ...props }) => {
                   void node;
