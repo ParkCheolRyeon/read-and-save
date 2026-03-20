@@ -148,5 +148,10 @@
     "id": "project-custom-20",
     "filename": "project-custom-20.mdx",
     "title": "프로젝트 맞춤 20문항"
+  },
+  {
+    "id": "coxwave",
+    "filename": "coxwave.mdx",
+    "title": "Coxwave 과제 면접 질문 리스트"
   }
 ]
