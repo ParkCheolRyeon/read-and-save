@@ -34,7 +34,7 @@ learningGoals:
 
 ## 99. 측정부터 시작한다 — Core Web Vitals
 
-> **TL;DR** — 성능 최적화는 해결책부터가 아니라 측정부터. Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 "느리다"를 구체 지표로 분해한다. 필드 데이터와 실험실 데이터를 함께 봐야 한다.
+> **핵심 요약** — 성능 최적화는 해결책부터가 아니라 측정부터. Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 "느리다"를 구체 지표로 분해한다. 필드 데이터와 실험실 데이터를 함께 봐야 한다.
 
 ### 최적화의 올바른 순서
 
@@ -89,7 +89,7 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 
 ## 100. LCP — 주요 콘텐츠 표시 속도
 
-> **TL;DR** — LCP는 뷰포트에서 가장 큰 콘텐츠가 렌더링 완료되는 시점. 서버 응답(TTFB), 리소스 발견 시점, 다운로드 우선순위, 렌더 차단이 복합 원인. LCP 이미지에 lazy loading을 걸면 오히려 악화.
+> **핵심 요약** — LCP는 뷰포트에서 가장 큰 콘텐츠가 렌더링 완료되는 시점. 서버 응답(TTFB), 리소스 발견 시점, 다운로드 우선순위, 렌더 차단이 복합 원인. LCP 이미지에 lazy loading을 걸면 오히려 악화.
 
 ### LCP를 늦추는 원인과 개선
 
@@ -128,7 +128,7 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 
 ## 101. INP — 상호작용 반응성
 
-> **TL;DR** — INP는 모든 상호작용 중 가장 느린 응답 시간의 대표값(~p98). FID가 첫 입력만 봤다면 INP는 전체를 본다. Long Task(50ms+)와 메인 스레드 점유가 핵심 원인.
+> **핵심 요약** — INP는 모든 상호작용 중 가장 느린 응답 시간의 대표값(~p98). FID가 첫 입력만 봤다면 INP는 전체를 본다. Long Task(50ms+)와 메인 스레드 점유가 핵심 원인.
 
 ### FID vs INP
 
@@ -176,7 +176,7 @@ function handleClick() {
 
 ## 102. CLS — 시각적 안정성
 
-> **TL;DR** — CLS는 예기치 않은 레이아웃 이동의 누적 점수. 이미지 크기 미지정, 동적 콘텐츠 삽입, 폰트 교체가 주요 원인. 공간을 미리 예약하는 것이 핵심.
+> **핵심 요약** — CLS는 예기치 않은 레이아웃 이동의 누적 점수. 이미지 크기 미지정, 동적 콘텐츠 삽입, 폰트 교체가 주요 원인. 공간을 미리 예약하는 것이 핵심.
 
 ### CLS를 유발하는 원인과 해결
 
@@ -211,7 +211,7 @@ function handleClick() {
 
 ## 103. 브라우저 렌더링 파이프라인 — Reflow, Repaint, Composite
 
-> **TL;DR** — 브라우저는 DOM → CSSOM → 렌더 트리 → Layout(Reflow) → Paint → Composite 순으로 화면을 그린다. Reflow는 비싸고, `transform`/`opacity` 애니메이션은 Composite만 발생해서 저렴하다.
+> **핵심 요약** — 브라우저는 DOM → CSSOM → 렌더 트리 → Layout(Reflow) → Paint → Composite 순으로 화면을 그린다. Reflow는 비싸고, `transform`/`opacity` 애니메이션은 Composite만 발생해서 저렴하다.
 
 ### 파이프라인
 
@@ -266,7 +266,7 @@ elements.forEach((el, i) => { el.style.height = heights[i] + 10 + "px"; });
 
 ## 104. 번들 크기와 코드 스플리팅
 
-> **TL;DR** — 번들 크기는 다운로드뿐 아니라 파싱/컴파일/실행 비용에 영향. 저사양 기기에서 체감 차이가 크다. 코드 스플리팅으로 초기 필요 코드만 먼저 보내고 나머지는 늦춘다.
+> **핵심 요약** — 번들 크기는 다운로드뿐 아니라 파싱/컴파일/실행 비용에 영향. 저사양 기기에서 체감 차이가 크다. 코드 스플리팅으로 초기 필요 코드만 먼저 보내고 나머지는 늦춘다.
 
 ### 번들이 큰 게 왜 문제인가
 
@@ -315,7 +315,7 @@ async function handleExport() {
 
 ## 105. 이미지 최적화와 Lazy Loading
 
-> **TL;DR** — 이미지는 LCP 후보이자 CLS 원인. 적절한 크기/포맷/우선순위/공간 예약을 함께 설계한다. Lazy loading은 fold 아래에만 — LCP 이미지에 걸면 악화.
+> **핵심 요약** — 이미지는 LCP 후보이자 CLS 원인. 적절한 크기/포맷/우선순위/공간 예약을 함께 설계한다. Lazy loading은 fold 아래에만 — LCP 이미지에 걸면 악화.
 
 ### 이미지 최적화 체크리스트
 
@@ -365,7 +365,7 @@ async function handleExport() {
 
 ## 106. 렌더 차단 리소스와 메인 스레드 점유
 
-> **TL;DR** — CSS는 렌더를 차단하고 동기 스크립트는 파싱을 차단한다. `defer`/`async`와 Critical CSS로 첫 화면을 앞당기고, Long Task는 쪼개거나 Web Worker로 오프로드한다.
+> **핵심 요약** — CSS는 렌더를 차단하고 동기 스크립트는 파싱을 차단한다. `defer`/`async`와 Critical CSS로 첫 화면을 앞당기고, Long Task는 쪼개거나 Web Worker로 오프로드한다.
 
 ### 스크립트 로딩 전략
 
@@ -420,7 +420,7 @@ async function processInChunks(items) {
 
 ## 107. 긴 리스트, Observer API, 무거운 UI 전략
 
-> **TL;DR** — 긴 리스트는 virtualization으로 보이는 영역만 렌더. IntersectionObserver/ResizeObserver는 scroll/resize 이벤트보다 성능이 좋다. 무거운 UI는 상태 범위 축소 + lazy load가 핵심.
+> **핵심 요약** — 긴 리스트는 virtualization으로 보이는 영역만 렌더. IntersectionObserver/ResizeObserver는 scroll/resize 이벤트보다 성능이 좋다. 무거운 UI는 상태 범위 축소 + lazy load가 핵심.
 
 ### Virtualization — 보이는 영역만 렌더
 
@@ -473,7 +473,7 @@ useEffect(() => {
 
 ## 108. 체감 성능과 Fallback UI
 
-> **TL;DR** — 같은 대기 시간이라도 skeleton, optimistic UI, pending 상태가 있으면 덜 답답하다. 숫자 최적화와 UX 피드백을 함께 설계해야 한다. 300ms 이내 응답이면 로딩 표시를 생략하는 것도 방법.
+> **핵심 요약** — 같은 대기 시간이라도 skeleton, optimistic UI, pending 상태가 있으면 덜 답답하다. 숫자 최적화와 UX 피드백을 함께 설계해야 한다. 300ms 이내 응답이면 로딩 표시를 생략하는 것도 방법.
 
 ### 체감 성능 전략
 

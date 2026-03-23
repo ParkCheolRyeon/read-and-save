@@ -51,7 +51,7 @@ Part D. React 19 신규 기능
 
 ## 1. Flexbox vs Grid — 언제 뭘 쓰는가
 
-> **TL;DR** — Flexbox는 **한 방향**(가로 또는 세로) 배치에 강하고, Grid는 **두 방향**(행 + 열) 동시 배치에 강하다. "한 줄 정렬이면 Flex, 격자 구조면 Grid"가 기본 감각이다. 둘은 대체가 아니라 함께 쓴다.
+> **핵심 요약** — Flexbox는 **한 방향**(가로 또는 세로) 배치에 강하고, Grid는 **두 방향**(행 + 열) 동시 배치에 강하다. "한 줄 정렬이면 Flex, 격자 구조면 Grid"가 기본 감각이다. 둘은 대체가 아니라 함께 쓴다.
 
 ### 핵심 비교
 
@@ -204,7 +204,7 @@ Part D. React 19 신규 기능
 
 ## 2. 반응형 디자인 — 미디어 쿼리, Container Query, CSS 변수
 
-> **TL;DR** — 미디어 쿼리는 뷰포트 기준, Container Query는 부모 요소 기준으로 반응한다. CSS 변수(`--custom-property`)는 테마와 반응형에서 런타임 값 변경이 가능하다.
+> **핵심 요약** — 미디어 쿼리는 뷰포트 기준, Container Query는 부모 요소 기준으로 반응한다. CSS 변수(`--custom-property`)는 테마와 반응형에서 런타임 값 변경이 가능하다.
 
 ### 미디어 쿼리 — 뷰포트 기준
 
@@ -355,7 +355,7 @@ div.text { color: green; }      /* 0,0,1,1 — .text보다 높음 */
 
 ## 3. XSS — 공격 원리와 방어
 
-> **TL;DR** — XSS(Cross-Site Scripting)는 공격자가 웹 페이지에 악성 스크립트를 주입해 다른 사용자의 브라우저에서 실행시키는 공격이다. React의 JSX는 기본적으로 이스케이프하지만, `dangerouslySetInnerHTML`이나 `href`에 사용자 입력을 넣으면 취약해진다.
+> **핵심 요약** — XSS(Cross-Site Scripting)는 공격자가 웹 페이지에 악성 스크립트를 주입해 다른 사용자의 브라우저에서 실행시키는 공격이다. React의 JSX는 기본적으로 이스케이프하지만, `dangerouslySetInnerHTML`이나 `href`에 사용자 입력을 넣으면 취약해진다.
 
 ### XSS 종류
 
@@ -453,7 +453,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.examp
 
 ## 4. CSRF — 공격 원리와 방어
 
-> **TL;DR** — CSRF(Cross-Site Request Forgery)는 인증된 사용자의 브라우저를 이용해 의도하지 않은 요청을 보내는 공격이다. 쿠키가 자동 전송되는 특성을 악용한다. `SameSite` 쿠키 + CSRF 토큰 + Origin 검증으로 방어.
+> **핵심 요약** — CSRF(Cross-Site Request Forgery)는 인증된 사용자의 브라우저를 이용해 의도하지 않은 요청을 보내는 공격이다. 쿠키가 자동 전송되는 특성을 악용한다. `SameSite` 쿠키 + CSRF 토큰 + Origin 검증으로 방어.
 
 ### 공격 원리
 
@@ -549,7 +549,7 @@ async function transfer(data) {
 
 ## 5. SEO — meta 태그, Open Graph, Next.js Metadata API
 
-> **TL;DR** — SEO는 검색 엔진이 페이지를 이해하고 노출하는 데 필요한 기술적 기반이다. `<title>`, `<meta description>`, Open Graph, 구조화 데이터, sitemap, robots.txt가 핵심. Next.js는 Metadata API로 이를 선언적으로 관리한다.
+> **핵심 요약** — SEO는 검색 엔진이 페이지를 이해하고 노출하는 데 필요한 기술적 기반이다. `<title>`, `<meta description>`, Open Graph, 구조화 데이터, sitemap, robots.txt가 핵심. Next.js는 Metadata API로 이를 선언적으로 관리한다.
 
 ### 핵심 meta 태그
 
@@ -708,7 +708,7 @@ function ProductJsonLd({ product }) {
 
 ## 6. React 19 — use, useOptimistic, useFormStatus, ref as prop
 
-> **TL;DR** — React 19는 `use()`로 Promise/Context를 직접 읽고, `useOptimistic`으로 낙관적 업데이트를 단순화하고, `useFormStatus`로 폼 제출 상태를 선언적으로 처리하며, `ref`를 prop으로 직접 전달할 수 있게 해서 `forwardRef`가 불필요해졌다.
+> **핵심 요약** — React 19는 `use()`로 Promise/Context를 직접 읽고, `useOptimistic`으로 낙관적 업데이트를 단순화하고, `useFormStatus`로 폼 제출 상태를 선언적으로 처리하며, `ref`를 prop으로 직접 전달할 수 있게 해서 `forwardRef`가 불필요해졌다.
 
 ### use() — Promise와 Context를 직접 읽기
 

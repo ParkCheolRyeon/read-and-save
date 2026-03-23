@@ -37,7 +37,7 @@ learningGoals:
 
 ## 50. React를 왜 선언형이라고 부르나
 
-> **TL;DR** — React는 "어떻게 바꿔라"가 아니라 "이 상태일 때 이런 UI가 나와야 한다"고 선언하는 모델이다. `UI = f(state)` — 상태가 바뀌면 UI를 다시 계산한다.
+> **핵심 요약** — React는 "어떻게 바꿔라"가 아니라 "이 상태일 때 이런 UI가 나와야 한다"고 선언하는 모델이다. `UI = f(state)` — 상태가 바뀌면 UI를 다시 계산한다.
 
 ### 명령형 vs 선언형
 
@@ -100,7 +100,7 @@ function Counter() {
 
 ## 51. 렌더와 커밋, 그리고 Fiber 아키텍처
 
-> **TL;DR** — React는 렌더 단계(UI 계산)와 커밋 단계(DOM 반영)를 분리한다. Fiber 아키텍처 덕분에 렌더링을 잘게 쪼개고 중단/재개할 수 있어서 concurrent features가 가능하다.
+> **핵심 요약** — React는 렌더 단계(UI 계산)와 커밋 단계(DOM 반영)를 분리한다. Fiber 아키텍처 덕분에 렌더링을 잘게 쪼개고 중단/재개할 수 있어서 concurrent features가 가능하다.
 
 ### 렌더 단계 vs 커밋 단계
 
@@ -201,7 +201,7 @@ React는 두 가지 휴리스틱으로 O(n) diffing을 수행한다:
 
 ## 52. state ownership과 상태 끌어올리기
 
-> **TL;DR** — "이 상태를 누가 소유하나?"가 React 구조 설계의 핵심 질문이다. 공유가 필요하면 가장 가까운 공통 부모로 끌어올리되, 불필요하게 높이 올리면 리렌더 범위가 넓어진다.
+> **핵심 요약** — "이 상태를 누가 소유하나?"가 React 구조 설계의 핵심 질문이다. 공유가 필요하면 가장 가까운 공통 부모로 끌어올리되, 불필요하게 높이 올리면 리렌더 범위가 넓어진다.
 
 ### 핵심 개념
 
@@ -297,7 +297,7 @@ function App() {
 
 ## 53. Context는 언제 유용하고, 언제 과용되기 쉬운가
 
-> **TL;DR** — Context는 props drilling을 줄여주는 값 전달 도구다. 단, Context 값이 바뀌면 모든 구독자가 리렌더되므로 변경 빈도가 낮은 값에 적합하고, 관심사별로 분리해야 한다.
+> **핵심 요약** — Context는 props drilling을 줄여주는 값 전달 도구다. 단, Context 값이 바뀌면 모든 구독자가 리렌더되므로 변경 빈도가 낮은 값에 적합하고, 관심사별로 분리해야 한다.
 
 ### 핵심 개념
 
@@ -396,7 +396,7 @@ function ThemeProvider({ children }) {
 
 ## 54. Context와 Zustand/Redux는 어떤 문제를 다르게 푸나
 
-> **TL;DR** — Context는 "값 전달", Zustand/Redux는 "상태 저장 + 구독 제어". 가장 큰 차이는 **selector로 부분 구독**이 가능한지 여부다.
+> **핵심 요약** — Context는 "값 전달", Zustand/Redux는 "상태 저장 + 구독 제어". 가장 큰 차이는 **selector로 부분 구독**이 가능한지 여부다.
 
 ### 핵심 차이
 
@@ -476,7 +476,7 @@ function ThemeToggle() {
 
 ## 55. client state와 server state는 왜 구분해야 하나
 
-> **TL;DR** — client state는 브라우저 안에서 완결되는 UI 상태, server state는 서버와 동기화가 필요한 데이터다. 둘을 구분해야 어떤 도구로 관리할지 판단이 쉬워진다.
+> **핵심 요약** — client state는 브라우저 안에서 완결되는 UI 상태, server state는 서버와 동기화가 필요한 데이터다. 둘을 구분해야 어떤 도구로 관리할지 판단이 쉬워진다.
 
 ### 핵심 비교
 
@@ -585,7 +585,7 @@ const mutation = useMutation({
 
 ## 56. useReducer는 언제 useState 대신 쓰나
 
-> **TL;DR** — 다음 상태가 "이전 상태 + 액션"으로 결정되고, 여러 값이 함께 변하거나 전환 조건이 복잡할 때 useReducer가 useState보다 구조적이다.
+> **핵심 요약** — 다음 상태가 "이전 상태 + 액션"으로 결정되고, 여러 값이 함께 변하거나 전환 조건이 복잡할 때 useReducer가 useState보다 구조적이다.
 
 ### useState vs useReducer 판단 기준
 
@@ -648,7 +648,7 @@ function formReducer(state: FormState, action: FormAction): FormState {
 
 ## 57. React 18 concurrent features
 
-> **TL;DR** — React 18은 렌더링에 우선순위를 부여해서, 급한 업데이트(입력)가 덜 급한 렌더링(리스트)을 기다리지 않게 한다. `useTransition`, `useDeferredValue`, `Suspense`가 핵심.
+> **핵심 요약** — React 18은 렌더링에 우선순위를 부여해서, 급한 업데이트(입력)가 덜 급한 렌더링(리스트)을 기다리지 않게 한다. `useTransition`, `useDeferredValue`, `Suspense`가 핵심.
 
 ### 세 가지 핵심 도구
 
@@ -731,7 +731,7 @@ Suspense는 하위 컴포넌트가 데이터를 기다리는 동안 fallback을 
 
 ## 58. 커스텀 훅, controlled/uncontrolled, 에러 바운더리
 
-> **TL;DR** — 커스텀 훅은 재사용 가능한 상태+효과 묶음 추출, controlled/uncontrolled은 폼 값 관리 방식, 에러 바운더리는 렌더링 에러 격리 구조. 세 가지 모두 React 구조 설계의 실전 도구다.
+> **핵심 요약** — 커스텀 훅은 재사용 가능한 상태+효과 묶음 추출, controlled/uncontrolled은 폼 값 관리 방식, 에러 바운더리는 렌더링 에러 격리 구조. 세 가지 모두 React 구조 설계의 실전 도구다.
 
 ### 커스텀 훅 — 언제 분리하나
 
@@ -806,7 +806,7 @@ function App() {
 
 ## 59. 복잡한 UI에서는 상태를 어떻게 나눠야 하나
 
-> **TL;DR** — 상태를 영속/일시/파생/서버로 분류하고 역할별로 관리한다. 파생 상태를 `useState + useEffect`로 동기화하는 건 흔한 안티패턴이다.
+> **핵심 요약** — 상태를 영속/일시/파생/서버로 분류하고 역할별로 관리한다. 파생 상태를 `useState + useEffect`로 동기화하는 건 흔한 안티패턴이다.
 
 ### 상태 역할별 분류
 

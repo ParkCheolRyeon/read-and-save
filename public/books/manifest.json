@@ -65,6 +65,11 @@
     "title": "Ch.13 CSS 레이아웃, 웹 보안, SEO, React 19까지"
   },
   {
+    "id": "chapter14",
+    "filename": "chapter14.mdx",
+    "title": "Ch.14 JD기반 30문항 압축."
+  },
+  {
     "id": "01-why-fiber",
     "filename": "01-why-fiber.mdx",
     "title": "Ch.1 why fiber"
@@ -103,56 +108,6 @@
     "id": "08-debugging-and-modern-react",
     "filename": "08-debugging-and-modern-react.mdx",
     "title": "Ch.8 debugging and modern react"
-  },
-  {
-    "id": "js-20",
-    "filename": "js-20.mdx",
-    "title": "js20문항"
-  },
-  {
-    "id": "ts-20",
-    "filename": "ts-20.mdx",
-    "title": "ts20문항"
-  },
-  {
-    "id": "react-20",
-    "filename": "react-20.mdx",
-    "title": "react20문항"
-  },
-  {
-    "id": "nextjs-20",
-    "filename": "nextjs-20.mdx",
-    "title": "nextjs20문항"
-  },
-  {
-    "id": "cs-20",
-    "filename": "cs-20.mdx",
-    "title": "cs 20문항"
-  },
-  {
-    "id": "network-20",
-    "filename": "network-20.mdx",
-    "title": "네트워크 20문항"
-  },
-  {
-    "id": "infra-20",
-    "filename": "infra-20.mdx",
-    "title": "인프라 20문항"
-  },
-  {
-    "id": "test-20",
-    "filename": "test-20.mdx",
-    "title": "테스트 20문항"
-  },
-  {
-    "id": "web-performance-20",
-    "filename": "web-performance-20.mdx",
-    "title": "웹 성능 20문항"
-  },
-  {
-    "id": "project-custom-20",
-    "filename": "project-custom-20.mdx",
-    "title": "프로젝트 맞춤 20문항"
   },
   {
     "id": "coxwave",
