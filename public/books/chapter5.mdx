@@ -891,3 +891,61 @@ const [cards, setCards] = useState({ k1: { id: "k1", title: "..." } });
 - Server Component와 Client Component는 왜 나뉘는가?
 - `use client`는 어떤 비용을 뜻하나?
 - URL 상태와 서버 데이터 패칭 전략은 어떻게 설계해야 하나?
+
+---
+
+# 챕터 5 핵심 요약 — 상태가 UI를 결정하는 구조, 그리고 그 상태를 어디에 둘 것인가
+
+이 챕터 전체를 관통하는 하나의 질문이 있다.
+
+> **React는 상태로부터 UI를 어떻게 계산하고, 그 상태는 어떤 기준으로 나누고 어디에 두어야 하는가?**
+
+---
+
+### 1단계: DOM을 직접 바꾸지 않는다 — 선언형 모델
+
+React는 **"이 상태일 때 UI는 이렇다"고 선언**하는 모델이다. `UI = f(state)` — 상태가 바뀌면 React가 UI를 다시 계산한다. 디버깅의 대상이 DOM이 아니라 상태가 된다.
+
+### 2단계: 계산과 반영의 분리 — 렌더와 커밋, Fiber
+
+React는 **렌더 단계(UI 계산, 순수)**와 **커밋 단계(DOM 반영)**를 분리한다. Fiber 아키텍처는 각 노드를 작업 단위로 만들어 **렌더링을 중단/재개하고 우선순위를 제어**할 수 있게 한다. 재조정은 **타입이 다르면 전체 교체, 같으면 key로 정체성 추적**이라는 두 규칙으로 O(n) diffing을 수행한다.
+
+### 3단계: 이 상태를 누가 소유하나 — state ownership
+
+**"누가 읽고 누가 바꾸는가"**가 판단 기준이다. 형제가 같은 상태를 각각 관리하면 어긋나기 쉬우므로, **가장 가까운 공통 부모**로 끌어올리되, 너무 높이 올리면 리렌더 범위가 넓어진다.
+
+### 4단계: props를 계속 내려주는 고통 — Context
+
+Context는 **props drilling을 줄여주는 값 전달 도구**지만, 값이 바뀌면 **모든 구독자가 리렌더**된다. **변경 빈도가 낮은 값**(테마, 로케일, 인증)에 적합하다.
+
+### 5단계: 부분 구독이 필요할 때 — Zustand/Redux
+
+Context와의 가장 큰 차이는 **selector로 부분 구독**이 가능한지 여부다. **서버 데이터는 React Query, 변경 빈도 낮은 공통값은 Context, 부분 구독이 필요하면 Zustand**라는 선택 가이드가 생긴다.
+
+### 6단계: 서버에서 온 데이터는 다르다 — client state vs server state
+
+**client state**는 브라우저 안에서 완결되지만, **server state**는 캐싱, stale 관리, background refetch, mutation 후 invalidation이라는 추가 차원이 있다. React Query는 이 패턴을 자동화한다.
+
+### 7단계: 여러 값이 함께 바뀌는 복잡한 전환 — useReducer
+
+다음 상태가 **"이전 상태 + 액션"으로 결정**되고, 여러 값이 함께 변하거나 전환 조건이 복잡할 때 useReducer가 구조적이다.
+
+### 8단계: 급한 업데이트가 느린 렌더링을 기다리지 않게 — concurrent features
+
+`useTransition`은 상태 업데이트를 non-urgent로 표시해 **입력 응답성을 유지**하고, `useDeferredValue`는 비싼 렌더링을 지연시킨다. **우선순위 제어로 체감 응답성이 좋아지는 것**이다.
+
+### 9단계: 구조 설계의 실전 도구 — 커스텀 훅, controlled/uncontrolled, 에러 바운더리
+
+커스텀 훅은 **재사용 가능한 상태+효과 묶음**, controlled/uncontrolled은 **폼 값의 소유권**, 에러 바운더리는 **렌더링 에러를 격리해서 부분 실패만 보여주는 구조**다.
+
+### 10단계: 복잡한 UI에서 상태를 나누는 기준 — 역할별 분류와 정규화
+
+상태를 **영속(DB 반영), 일시(hover/drag), 파생(계산 가능), 서버(동기화 필요)**로 분류한다. 파생 상태를 `useState + useEffect`로 동기화하는 건 안티패턴이며, `useMemo`나 일반 변수로 충분하다.
+
+---
+
+### 한 줄로 이어 읽기
+
+**선언형 모델**(`UI = f(state)`)이 React의 사고방식을 정하고 → **렌더/커밋 분리**와 **Fiber**가 계산과 반영을 나누고 → **state ownership**이 "누가 상태를 소유하나"를 결정하고 → **Context**가 props drilling을 줄이되 부분 구독은 못 하므로 → **Zustand/Redux**가 selector 기반 구독을 제공하고 → **server state**는 React Query로 캐싱/동기화하고 → 복잡한 전환은 **useReducer**로, 우선순위는 **concurrent features**로, 실패는 **에러 바운더리**로 격리하고 → 최종적으로 상태를 **역할별로 분류하고 정규화**해서 설계한다.
+
+> 다음 챕터에서는 "상태를 어떤 구조로 관리할 것인가"에서 **"React 앱을 서버와 클라이언트 경계까지 포함해 어떻게 설계할 것인가"**로 축이 이동한다. Next.js의 렌더링 전략, Server/Client Component, 데이터 페칭과 캐싱 설계가 시작된다.

@@ -645,3 +645,49 @@ export const config = {
 - HTTP와 HTTPS, TLS는 각각 어떤 역할을 하나?
 - 쿠키, 세션, 토큰은 어떻게 구분해야 하나?
 - CORS, 캐시 헤더, CDN은 프론트엔드 성능과 어떻게 연결되나?
+
+---
+
+# 챕터 6 핵심 요약 — React 위에 서버 경계를 세우고, "언제 무엇을 어디서" 렌더할지 설계하기
+
+이 챕터 전체를 관통하는 하나의 질문이 있다.
+
+> **React 앱에서 서버와 클라이언트의 경계를 어떻게 나누고, 각 페이지의 데이터를 언제 어디서 어떻게 가져와야 하는가?**
+
+---
+
+### 1단계: React만으로는 부족한 질문들 — Next.js의 역할
+
+React 자체는 UI 라이브러리일 뿐, 라우팅, 서버 렌더링, 데이터 페칭에 대한 답이 없다. Next.js는 **App Router 위에 이 모든 것을 얹어서 "언제 무엇을 어디서 렌더할 것인가"를 설계**하게 만든다.
+
+### 2단계: 페이지마다 다른 전략 — SSR, SSG, ISR, CSR, Streaming
+
+빌드 시 확정되면 SSG, 가끔 바뀌면 ISR, 요청마다 최신이면 SSR, 인터랙션 중심이면 CSR. **Streaming**은 Suspense와 결합해 준비된 부분부터 점진적으로 전송한다.
+
+### 3단계: 실행 환경을 나누는 경계선 — Server Component와 Client Component
+
+App Router의 기본값은 **Server Component**다. 상태, 이벤트, 브라우저 API가 필요한 곳만 `'use client'`로 선언한다. **`'use client'`는 모듈 그래프 상의 번들 경계**이므로 가능한 leaf 컴포넌트에만 붙여야 한다.
+
+### 4단계: Route Handler 없이 서버 mutation — Server Actions
+
+`'use server'`로 표시된 함수는 **클라이언트에서 호출하면 서버에서 실행**된다. `revalidatePath`/`revalidateTag`로 **캐시 무효화까지 한 흐름**으로 가능하다.
+
+### 5단계: 서버에서 직접 가져오고, 신선도를 설계한다 — 데이터 페칭과 캐싱
+
+Server Component에서 **async/await로 직접 fetch**하는 것이 기본이다. 시간 기반과 태그 기반 재검증을 조합하고, 인터랙션 기반 데이터는 클라이언트에서 SWR/React Query로 처리하는 **하이브리드 패턴**이 일반적이다.
+
+### 6단계: 여러 API를 합쳐 프론트 친화적 응답을 만든다 — Route Handlers와 BFF
+
+**BFF 패턴**으로 여러 백엔드 API를 병렬 요청하고 프론트 친화적 shape로 합쳐 내려줄 수 있다. **외부 접근이 필요한 엔드포인트**에 적합하다.
+
+### 7단계: 공유 가능한 상태는 URL에, 공통 정책은 Middleware에
+
+**"이 URL을 다른 사람에게 공유했을 때 의미가 있는가?"**가 URL 상태의 기준이다. Middleware는 Edge Runtime에서 요청 초반에 **인증 리다이렉트, locale 분기** 같은 가벼운 공통 정책을 적용한다.
+
+---
+
+### 한 줄로 이어 읽기
+
+**Next.js**가 React 위에 라우팅/서버 렌더링/캐싱을 얹고 → **렌더링 전략**(SSG/ISR/SSR/CSR/Streaming)을 페이지별로 선택하고 → **Server/Client Component**로 실행 환경 경계를 나누고 → **Server Actions**로 mutation과 캐시 무효화를 한 흐름으로 처리하고 → **데이터 페칭**은 서버 직접 fetch + 클라이언트 하이브리드로 설계하고 → **Route Handler/BFF**로 여러 API를 합치고 → **URL 상태**로 공유 가능한 상태를 관리하고 → **Middleware**로 요청 초반 공통 정책을 적용한다.
+
+> 다음 챕터에서는 "앱을 서버와 클라이언트로 어떻게 설계할 것인가"에서 **"사용자의 요청이 브라우저에서 서버까지 어떤 흐름으로 오가는가"**로 축이 이동한다. DNS, HTTP, 인증, CORS, 캐시, CDN — 네트워크와 브라우저의 기초가 시작된다.
