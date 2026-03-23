@@ -2,7 +2,7 @@
 title: "React 렌더링 모델에서 상태 구조 설계까지"
 chapter: "05"
 summary: "React의 선언형 렌더링 모델, 상태 소유 구조, client/server state 분리까지의 학습 플로우입니다."
-estimatedReadMinutes: 50
+estimatedReadMinutes: 55
 learningGoals:
   - "React의 선언형 모델, render/commit, Virtual DOM, 재조정을 설명한다"
   - "state ownership, lifting state up, Context, 외부 상태관리 도구의 역할을 구분한다"
@@ -15,19 +15,31 @@ learningGoals:
 
 > **React는 화면을 직접 조작하는 도구가 아니라, 상태를 기반으로 UI를 다시 계산하는 시스템이라는 관점으로 이해해야 한다.**
 
+### 전체 흐름 맵
+
+```
+선언형 모델 (UI = f(state))
+  → 렌더 / 커밋 (계산과 반영의 분리)
+    → Virtual DOM / Fiber (변경 감지와 우선순위 스케줄링)
+      → 재조정 (무엇을 유지하고 무엇을 교체할지)
+        → state ownership (누가 상태를 소유하나)
+          → Context (props drilling 없이 값 전달)
+            → Zustand / Redux (구독 제어와 부분 구독)
+              → client state vs server state (역할 분리)
+                → React Query (서버 상태 전용 도구)
+                  → useReducer (복잡한 상태 전환)
+                    → concurrent features (렌더링 우선순위)
+                      → 커스텀 훅 / controlled vs uncontrolled / 에러 바운더리
+                        → 복잡한 UI의 상태 설계
+```
+
 ---
 
 ## 50. React를 왜 선언형이라고 부르나
 
-React를 처음 배울 때 가장 자주 듣는 표현 중 하나가 "React는 선언형이다"이다.
-그런데 이걸 그냥 "코드가 예쁘다" 정도로 이해하면 별 도움이 안 된다.
+> **TL;DR** — React는 "어떻게 바꿔라"가 아니라 "이 상태일 때 이런 UI가 나와야 한다"고 선언하는 모델이다. `UI = f(state)` — 상태가 바뀌면 UI를 다시 계산한다.
 
-### 핵심 개념
-
-선언형이라는 건
-**어떻게 하나하나 조작할지를 직접 적는 대신, 지금 상태에서 어떤 UI가 나와야 하는지를 기술하는 방식**이다.
-
-### 명령형과 비교해서 보기
+### 명령형 vs 선언형
 
 ```js
 // 명령형: DOM을 직접 단계별로 조작
@@ -45,7 +57,6 @@ btn.addEventListener("click", () => {
 // 선언형: 상태에 따라 어떤 UI가 나와야 하는지 기술
 function Counter() {
   const [count, setCount] = useState(0);
-
   return (
     <div>
       <p>현재 값: {count}</p>
@@ -53,260 +64,154 @@ function Counter() {
     </div>
   );
 }
-// 개발자는 "p 태그를 찾아서 텍스트를 바꿔라"라고 쓰지 않는다.
-// count 상태에 따라 어떤 UI가 보여야 하는지를 선언한다.
+// "p 태그를 찾아서 텍스트를 바꿔라"가 아니라
+// "count가 이 값일 때 이런 UI다"를 선언한다
 ```
 
-이 관점을 이해해야 아래 질문들이 이어진다.
+### UI = f(state)
 
-- 왜 state가 중요한가
-- 왜 render가 다시 돈다고 표현하는가
-- 왜 직접 DOM 조작이 React와 자주 충돌하는가
-- 왜 UI 버그를 "상태와 UI 불일치"로 설명할 수 있는가
+이 공식이 React의 핵심 사고 모델이다.
+
+| | 명령형 (jQuery, Vanilla) | 선언형 (React) |
+|---|---|---|
+| **관점** | "이 DOM 요소를 이렇게 바꿔라" | "이 상태일 때 UI는 이렇다" |
+| **상태-UI 관계** | 개발자가 직접 동기화 | React가 자동 계산 |
+| **버그 원인** | 상태와 DOM이 어긋남 | 상태 자체의 문제 |
+| **디버깅** | DOM을 추적 | 상태를 추적 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> jQuery로 만든 레거시 탭 UI에서 "탭은 B인데 내용은 A" 같은 버그가 반복됐다. 탭 상태와 DOM 업데이트가 여러 곳에 흩어져 있어서 동기화가 깨진 것. React로 마이그레이션하면서 `activeTab` state 하나로 탭 UI와 콘텐츠를 선언하니 상태-UI 불일치 버그가 사라짐.
 
 ### 자주 하는 오해
 
-- 선언형이면 내부적으로 아무 일도 안 한다 → 틀림. React는 내부적으로 Virtual DOM 비교, DOM 조작을 모두 수행한다. 개발자가 직접 안 할 뿐이다.
-- React는 DOM을 안 만진다 → 틀림. 직접 만지는 대신 계산된 결과를 바탕으로 최소한의 DOM 변경을 수행한다.
+- 선언형이면 내부적으로 아무 일도 안 한다 → **틀림.** React는 Virtual DOM 비교, DOM 조작을 모두 수행한다. 개발자가 직접 안 할 뿐.
+- React는 DOM을 안 만진다 → **틀림.** 계산된 결과를 바탕으로 최소한의 DOM 변경을 수행한다.
+- 선언형이면 성능이 더 좋다 → **항상 그런 건 아니다.** 선언형의 장점은 성능보다 **예측 가능성과 유지보수성**이다.
 
 ### 면접 압축 답변
 
-- **10초**: React는 DOM을 직접 조작하는 대신, 현재 상태에서 어떤 UI가 나와야 하는지를 기술하는 선언형 모델입니다.
-- **30초**: 명령형은 DOM 요소를 찾고 속성을 직접 바꾸지만, React는 상태와 UI의 대응 관계를 선언하고 상태가 바뀌면 UI를 다시 계산합니다. 개발자는 조작 절차가 아닌 결과를 기술하고, React가 그 결과를 실제 화면에 반영합니다.
+- **10초**: React는 DOM을 직접 조작하는 대신, 현재 상태에서 어떤 UI가 나와야 하는지를 기술하는 선언형 모델입니다. `UI = f(state)`.
+- **30초**: 명령형은 DOM을 직접 찾고 바꾸지만, React는 상태와 UI의 대응 관계를 선언합니다. 상태가 바뀌면 React가 UI를 다시 계산하고, 이전 결과와 비교해서 필요한 DOM 변경만 반영합니다. 덕분에 상태-UI 불일치 버그가 줄어듭니다.
 
-> 이제 React가 선언형이라는 건 알았다. **그렇다면 상태가 바뀌었을 때 React는 내부에서 어떤 단계를 거쳐 UI를 바꾸는가?** 여기서 render와 commit으로 넘어간다.
+> React가 선언형이라는 건 알았다. **상태가 바뀌었을 때 React는 내부에서 어떤 단계를 거쳐 UI를 바꾸는가?**
 
 ---
 
-## 51. 렌더와 커밋은 왜 구분해야 하나
+## 51. 렌더와 커밋, 그리고 Fiber 아키텍처
 
-React를 쓰다 보면 "리렌더"라는 말을 정말 자주 쓴다.
-그런데 많은 사람이 렌더와 화면 변경을 같은 말처럼 섞어서 쓴다.
-이걸 분리해서 이해해야 React 성능과 동작을 더 정확하게 설명할 수 있다.
+> **TL;DR** — React는 렌더 단계(UI 계산)와 커밋 단계(DOM 반영)를 분리한다. Fiber 아키텍처 덕분에 렌더링을 잘게 쪼개고 중단/재개할 수 있어서 concurrent features가 가능하다.
 
-### 핵심 개념
-
-React는 대체로 아래 두 단계를 거친다.
-
-#### 렌더 단계 (Render Phase)
-
-- 컴포넌트를 실행해서 다음 UI 결과를 계산한다
-- 어떤 변경이 필요한지 비교할 재료를 만든다
-- 아직 실제 DOM을 바꾸는 단계는 아니다
-- **순수해야 한다** — 사이드 이펙트 없이 같은 입력이면 같은 출력
-
-#### 커밋 단계 (Commit Phase)
-
-- 렌더 결과를 바탕으로 실제 DOM 변경을 반영한다
-- DOM 변경 직후 `useLayoutEffect`가 **동기적으로** 실행된다 (브라우저가 화면을 그리기 전)
-- 브라우저가 화면을 그린 후 `useEffect`가 **비동기적으로** 실행된다
+### 렌더 단계 vs 커밋 단계
 
 ```
 상태 변경
-  → 렌더 단계: 컴포넌트 함수 실행, JSX 계산
-  → 커밋 단계: 실제 DOM 반영
-    → useLayoutEffect 실행 (동기, 페인트 전)
-    → 브라우저 페인트
-    → useEffect 실행 (비동기, 페인트 후)
+    ↓
+┌──────────────────────────────────────────────────┐
+│ [렌더 단계] — 순수 계산, 부수효과 금지            │
+│  컴포넌트 함수 실행 → 새 JSX 생성 → diffing       │
+│  ※ React 18에서는 중단/재개 가능 (time-slicing)   │
+└──────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────┐
+│ [커밋 단계] — 실제 DOM 변경                       │
+│  변경된 DOM 노드만 업데이트                        │
+│    → useLayoutEffect (DOM 변경 직후, 동기)        │
+│      → 브라우저 페인트                             │
+│        → useEffect (페인트 이후, 비동기)           │
+└──────────────────────────────────────────────────┘
 ```
 
-### 왜 이게 중요한가
+### Virtual DOM과 Fiber
 
-- 리렌더가 일어나도 실제 DOM 변경은 최소화될 수 있다
-- 렌더 횟수만 보고 성능을 섣불리 판단하면 안 된다
-- `useLayoutEffect`와 `useEffect` 차이가 이 흐름 위에서만 설명된다
-
-### 자주 하는 오해
-
-- 렌더되면 무조건 DOM도 다시 그린다 → 틀림. 렌더 결과가 이전과 같으면 DOM 변경이 없을 수 있다.
-- 함수가 다시 실행되면 성능 문제다 → 항상 그렇진 않다. 렌더 계산 자체는 대부분 빠르다.
-- `useLayoutEffect`와 `useEffect`는 같은 타이밍이다 → 틀림. `useLayoutEffect`는 DOM 변경 직후 동기 실행, `useEffect`는 페인트 이후 비동기 실행이다.
-
-### 면접 압축 답변
-
-- **10초**: 렌더는 다음 UI를 계산하는 단계, 커밋은 실제 DOM에 반영하는 단계입니다. 리렌더가 곧 DOM 변경은 아닙니다.
-- **30초**: 렌더 단계에서 컴포넌트 함수를 실행해 JSX를 계산하고, 커밋 단계에서 변경된 부분만 실제 DOM에 반영합니다. DOM 반영 직후 `useLayoutEffect`가 동기 실행되고, 브라우저 페인트 이후 `useEffect`가 비동기 실행됩니다.
-
-> 이제 렌더와 커밋을 나눴다. **그럼 React는 렌더 단계에서 무엇을 비교하고, 무엇을 바꾸려는 걸까?** 여기서 Virtual DOM으로 넘어간다.
-
----
-
-## 52. Virtual DOM은 정확히 무엇을 뜻하나
-
-Virtual DOM은 React 면접에서 정말 많이 나오지만,
-설명이 추상적으로 흐르기 쉬운 개념이다.
-
-### 핵심 개념
-
-Virtual DOM은 브라우저 DOM 그 자체가 아니라,
-**현재 UI 구조를 메모리 안에서 표현한 자바스크립트 객체 트리**다.
+Virtual DOM은 UI 구조를 **메모리 안의 JS 객체 트리**로 표현한 것이다.
 
 ```jsx
-// 이 JSX는
+// 이 JSX는 내부적으로 JS 객체 트리가 된다
 <div>
   <h1>Hello</h1>
   <p>World</p>
 </div>
 
-// 내부적으로 이런 객체 트리가 된다 (React.createElement의 결과)
-{
-  type: 'div',
-  props: {
-    children: [
-      { type: 'h1', props: { children: 'Hello' } },
-      { type: 'p', props: { children: 'World' } }
-    ]
-  }
-}
+// → { type: 'div', props: { children: [
+//     { type: 'h1', props: { children: 'Hello' } },
+//     { type: 'p', props: { children: 'World' } }
+//   ]}}
 ```
 
-React는:
+React 16부터는 이 트리를 **Fiber**라는 구조로 관리한다.
 
-1. 상태를 바탕으로 새로운 Virtual DOM 트리를 계산하고
-2. 이전 트리와 비교한 뒤 (diffing)
-3. 실제 DOM에 필요한 변경만 반영한다 (patching)
+| | Stack Reconciler (React 15 이전) | Fiber Reconciler (React 16+) |
+|---|---|---|
+| **순회 방식** | 재귀 (한 번 시작하면 끝까지) | linked list (한 노드씩 처리) |
+| **중단/재개** | 불가능 | 가능 (time-slicing) |
+| **우선순위** | 없음 (모든 업데이트 동등) | 있음 (urgent vs non-urgent) |
+| **concurrent features** | 불가능 | 가능 |
 
-### Fiber 아키텍처
+각 Fiber 노드가 가지는 정보:
 
-React 16부터는 단순 객체 트리가 아니라 **Fiber**라는 내부 구조를 사용한다. Fiber는 각 컴포넌트/요소를 linked list 형태의 노드로 표현하며, 렌더링 작업을 **잘게 쪼개서 중단/재개**할 수 있게 해준다. 이게 React의 concurrent features(Suspense, useTransition 등)를 가능하게 하는 기반이다.
+```
+Fiber 노드
+├── type: 컴포넌트 함수 또는 DOM 태그 ('div', MyComponent)
+├── props: 전달된 속성
+├── child / sibling / return: 자식, 형제, 부모 포인터
+├── stateNode: 실제 DOM 노드 또는 컴포넌트 인스턴스
+├── memoizedState: 훅 상태 체인 (linked list)
+└── effectTag: 커밋 시 수행할 DOM 조작 (삽입/갱신/삭제)
+```
 
-각 Fiber 노드는 하나의 컴포넌트 또는 DOM 요소에 대응하며, 대략 아래와 같은 정보를 갖는다:
+Fiber 덕분에 한 노드 처리 후 **브라우저에 제어권을 돌려줄 수 있다.** 사용자 입력(urgent)이 들어오면, 무거운 리스트 렌더링(non-urgent)을 잠시 멈추고 입력을 먼저 처리한 뒤 나머지를 이어간다.
 
-- **type**: 컴포넌트 함수 또는 DOM 태그 이름 (`'div'`, `MyComponent`)
-- **props**: 해당 노드에 전달된 속성
-- **child / sibling / return**: 첫 번째 자식, 다음 형제, 부모를 가리키는 포인터 — 이 세 포인터로 트리를 linked list처럼 순회한다
-- **stateNode**: 클래스 컴포넌트의 인스턴스 또는 실제 DOM 노드
-- **memoizedState**: 해당 노드의 훅 상태 체인
-- **effectTag / effect list**: 커밋 단계에서 수행할 DOM 조작 종류 (삽입, 갱신, 삭제)
+### 재조정 — 무엇을 유지하고 무엇을 교체하나
 
-이전의 스택 기반 재조정(Stack Reconciler)은 트리를 재귀로 순회했기 때문에 중간에 멈출 수 없었다. Fiber는 각 노드를 **하나의 작업 단위(unit of work)**로 만들어서, 한 노드 처리 후 브라우저에 제어권을 돌려줄 수 있다. 이를 **time-slicing**이라고 한다.
+React는 두 가지 휴리스틱으로 O(n) diffing을 수행한다:
 
-이 구조 덕분에 **우선순위 스케줄링**이 가능해진다. 예를 들어 사용자 입력(urgent)이 들어오면, 진행 중이던 무거운 리스트 렌더링(non-urgent)을 잠시 멈추고 입력을 먼저 처리한 뒤, 나머지 렌더링을 이어서 할 수 있다.
-
-### 자주 하는 오해
-
-- Virtual DOM이 있으니 무조건 빠르다 → 틀림. Virtual DOM은 추가 비교 비용이 있다. 핵심은 속도보다 **선언형 UI를 가능하게 하는 추상화**다.
-- React는 실제 DOM을 전혀 안 쓴다 → 틀림. 최종적으로 실제 DOM을 조작한다.
-- Virtual DOM은 그냥 DOM 복사본이다 → JS 객체 트리이지 DOM 복사본이 아니다.
-
-### 면접 압축 답변
-
-- **10초**: Virtual DOM은 UI 구조를 메모리 안의 JS 객체 트리로 표현한 것입니다. React는 이전 트리와 새 트리를 비교해 필요한 DOM 변경만 반영합니다.
-- **30초**: React는 상태 변경 시 새 Virtual DOM 트리를 계산하고, 이전 트리와 diff해서 최소한의 실제 DOM 조작만 수행합니다. React 16부터는 Fiber 아키텍처를 통해 렌더링을 잘게 쪼개고 중단/재개할 수 있어서 concurrent features의 기반이 됩니다.
-
-> 이제 React가 새 UI 표현과 이전 표현을 비교한다는 걸 알았다. 그 비교 과정이 어떤 원리로 일어나는지, 즉 재조정으로 넘어간다.
-
----
-
-## 53. 재조정(reconciliation)은 왜 key와 연결되나
-
-Virtual DOM을 이해했다면, 다음은 재조정이다.
-React는 새 UI 표현과 이전 표현을 비교하면서 "무엇을 유지하고 무엇을 바꿀지" 판단해야 한다.
-
-### 핵심 개념
-
-재조정은 React가 이전 렌더 결과와 다음 렌더 결과를 비교하면서
-어떤 노드를 유지하고, 어떤 노드를 교체하고, 어떤 하위 트리를 다시 계산할지 정하는 과정이다.
-
-React는 두 가지 핵심 휴리스틱을 사용한다.
-
-1. **타입이 다르면 전체 교체**: 같은 위치에서 `<div>` → `<span>`으로 바뀌면 기존 트리를 버리고 새로 만든다.
-2. **같은 타입의 형제 요소는 `key`로 구분**: 리스트에서 어떤 항목이 같은 존재인지 `key`로 판단한다.
+1. **타입이 다르면 전체 교체**: `<div>` → `<span>`이면 하위 트리를 버리고 새로 만든다 (state 초기화)
+2. **같은 타입의 리스트 항목은 key로 구분**: 어떤 항목이 같은 존재인지 `key`로 판단
 
 ```tsx
 // 타입이 바뀌면 — 전체 교체 (state도 초기화)
 {showInput ? <input /> : <textarea />}
 
-// 같은 타입이 유지되면 — state 보존
+// 같은 타입이 유지되면 — state 보존, props만 업데이트
 {showInput ? <input type="text" /> : <input type="password" />}
-// 둘 다 <input>이므로 React는 같은 요소로 보고 props만 바꾼다
+// 둘 다 <input>이므로 React는 같은 요소로 보고 속성만 바꾼다
 ```
+
+> 참고: 리스트에서 key가 정체성을 어떻게 결정하는지, index key의 문제와 key 리셋 패턴은 **챕터 2 섹션 20**에서 상세히 다뤘다.
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 모달에서 "신규 생성"과 "수정" 모드를 같은 `<Form />` 컴포넌트로 전환했는데, 수정 모드에서 신규로 바꿔도 이전 입력값이 남아있는 버그. 원인은 같은 타입(`Form`)이라 React가 state를 보존한 것. `<Form key={mode} />`로 key를 바꿔서 모드 전환 시 state 초기화.
 
 ### 자주 하는 오해
 
-- 재조정은 무조건 깊은 비교를 다 한다 → 틀림. 같은 레벨에서만 비교하며, 타입이 다르면 하위 트리는 비교 없이 교체한다.
-- key는 성능 최적화용 옵션이다 → 정체성 유지와 직결된다. key가 바뀌면 React는 완전히 새로운 요소로 취급한다.
-
-### key로 state를 리셋하는 패턴
-
-key가 바뀌면 React는 새 요소로 인식해서 state를 초기화한다. 이걸 의도적으로 활용할 수 있다.
-
-```tsx
-// selectedUserId가 바뀌면 EditForm의 state가 완전히 리셋된다
-<EditForm key={selectedUserId} userId={selectedUserId} />
-```
+- 리렌더가 일어나면 무조건 DOM도 다시 그린다 → **틀림.** 렌더 결과가 이전과 같으면 DOM 변경 없음.
+- Virtual DOM이 있으니 무조건 빠르다 → **틀림.** 비교 비용이 있다. 핵심은 속도보다 **선언형 UI를 가능하게 하는 추상화**.
+- Fiber는 그냥 Virtual DOM의 다른 이름이다 → **다르다.** Fiber는 중단/재개와 우선순위 스케줄링을 위한 구조.
 
 ### 면접 압축 답변
 
-- **10초**: 재조정은 이전 렌더와 다음 렌더를 비교해 유지/교체를 결정하는 과정입니다. 타입이 다르면 전체 교체, 같은 타입의 리스트 항목은 key로 구분합니다.
-- **30초**: React는 같은 위치에서 타입이 바뀌면 하위 트리를 통째로 교체하고, 같은 타입이면 props만 업데이트합니다. 리스트에서는 key로 각 항목의 정체성을 추적하며, key가 바뀌면 새 요소로 인식해서 state를 초기화합니다.
+- **10초**: React는 렌더(UI 계산)와 커밋(DOM 반영)을 분리하고, Fiber 아키텍처로 렌더링을 중단/재개할 수 있습니다. 재조정은 타입과 key로 정체성을 판단합니다.
+- **30초**: 렌더 단계에서 컴포넌트를 실행해 새 Virtual DOM을 만들고, 이전 결과와 O(n) diffing 후 커밋 단계에서 변경된 DOM만 반영합니다. Fiber는 각 노드를 하나의 작업 단위로 만들어 time-slicing과 우선순위 스케줄링을 가능하게 합니다. 타입이 바뀌면 하위 트리를 교체하고, 리스트에서는 key로 정체성을 추적합니다.
 
-> 이제 정체성 유지가 왜 중요한지 봤다. 다음엔 그 정체성을 React에 알려주는 대표 장치인 `key`를 더 깊이 본다.
-
----
-
-## 54. key는 왜 단순 경고 제거용이 아닌가
-
-리스트 렌더링을 배우면 `key` 경고를 먼저 만나게 된다.
-그래서 초기에 `key`를 단순히 경고 없애는 값 정도로 오해하기 쉽다.
-
-### 핵심 개념
-
-`key`는 리스트 안 각 요소의 **identity**, 즉 정체성을 React에 알려주는 값이다.
-
-```tsx
-// 안정적인 id를 key로 — React가 정체성을 정확히 추적
-items.map((item) => <TodoItem key={item.id} item={item} />);
-
-// index를 key로 — 정렬/삽입/삭제 시 상태가 꼬일 수 있다
-items.map((item, index) => <TodoItem key={index} item={item} />);
-```
-
-### index key의 실제 문제
-
-```tsx
-// 각 TodoItem에 체크박스가 있다고 가정
-// items = ["A", "B", "C"] → 맨 앞에 "X"를 추가
-// key=index면: A의 state가 X에 붙고, B의 state가 A에 붙는다
-// key=item.id면: 각 항목의 state가 정확히 유지된다
-```
-
-### 자주 하는 오해
-
-- `key`는 unique하기만 하면 된다 → 가능한 한 **안정적**이어야 한다. 매 렌더마다 바뀌는 key는 의미가 없다.
-- `index`를 쓰면 항상 안 된다 → 정적 리스트(정렬/삭제 없는)에선 괜찮을 수 있다.
-- `key`는 성능만의 문제다 → 상태 보존과 정체성 문제이기도 하다.
-
-### 면접 압축 답변
-
-- **10초**: `key`는 리스트에서 각 요소의 정체성을 React에 알려주는 값입니다. 불안정한 key는 상태 꼬임을 일으킵니다.
-- **30초**: key는 단순 경고 제거용이 아니라 React의 재조정에서 어떤 요소가 같은 존재인지 판단하는 기준입니다. index를 key로 쓰면 정렬/삽입 시 상태가 엉뚱한 항목에 붙을 수 있고, key를 의도적으로 바꾸면 컴포넌트 state를 리셋할 수도 있습니다.
-
-> 이제 identity 감각이 생겼다. **그렇다면 상태는 어떤 위치에 둬야 정체성과 리렌더 범위를 더 안정적으로 관리할 수 있을까?** 즉 state ownership으로 넘어간다.
+> 이제 React의 렌더링 모델을 봤다. **상태는 어떤 위치에 둬야 리렌더 범위와 일관성을 안정적으로 관리할 수 있을까?**
 
 ---
 
-## 55. state ownership은 왜 구조 설계에서 중요하나
+## 52. state ownership과 상태 끌어올리기
 
-React에서 상태를 다루는 핵심 질문은 단순히 "state를 쓸까 말까"가 아니다.
-
-더 중요한 건:
-
-> **이 상태를 누가 소유해야 하는가?**
+> **TL;DR** — "이 상태를 누가 소유하나?"가 React 구조 설계의 핵심 질문이다. 공유가 필요하면 가장 가까운 공통 부모로 끌어올리되, 불필요하게 높이 올리면 리렌더 범위가 넓어진다.
 
 ### 핵심 개념
 
-state ownership은 어떤 상태를 어떤 컴포넌트가 책임지고 관리할지를 정하는 문제다.
-
 ```tsx
-// Bad: 두 컴포넌트가 같은 의미의 상태를 각각 관리
+// Bad: 같은 의미의 상태를 각각 관리 — 쉽게 어긋남
 function Sidebar() {
-  const [selectedId, setSelectedId] = useState(null); // 여기도 있고
-  // ...
+  const [selectedId, setSelectedId] = useState(null);
 }
 function Detail() {
-  const [selectedId, setSelectedId] = useState(null); // 여기도 있다
-  // 두 값이 쉽게 어긋난다
+  const [selectedId, setSelectedId] = useState(null);
 }
 
 // Good: 소유자를 하나로 정하고 나머지는 props로 받는다
@@ -321,74 +226,80 @@ function Parent() {
 }
 ```
 
-### 상태 위치를 정할 때 보는 기준
+### 상태 위치를 정하는 판단 기준
 
-- 이 상태를 누가 읽는가
-- 이 상태를 누가 바꾸는가
-- 여러 곳에서 동시에 일관되게 써야 하는가
-- 서버에서 내려오는 데이터인가
-- UI 일시 상태인가, 도메인 상태인가
+| 질문 | 로컬에 둘 때 | 끌어올릴 때 | 전역/외부 도구 |
+|---|---|---|---|
+| 누가 읽나? | 이 컴포넌트만 | 형제/부모도 읽음 | 어디서든 읽음 |
+| 누가 바꾸나? | 이 컴포넌트만 | 형제가 바꿔야 함 | 여러 곳에서 바꿈 |
+| 서버 데이터인가? | 아님 | 아님 | → React Query 등 |
+| 변경 빈도 | - | 높으면 리렌더 범위 주의 | selector로 부분 구독 |
 
-### 자주 하는 오해
-
-- 공유되면 무조건 전역 상태다 → 틀림. 공통 부모에 두는 것만으로 충분한 경우가 많다.
-- 가장 상위에 두면 관리가 쉽다 → 리렌더 범위가 불필요하게 넓어질 수 있다.
-- 로컬 상태는 작고 단순한 경우에만 쓴다 → 오히려 많은 UI 상태는 로컬이 더 적합하다.
-
-### 면접 압축 답변
-
-- **10초**: state ownership은 어떤 상태를 어느 컴포넌트가 책임질지 정하는 문제입니다.
-- **30초**: 이걸 잘 정해야 props 흐름, 리렌더 범위, 상태 일관성이 안정됩니다. 무조건 상위나 전역에 두기보다, 누가 읽고 누가 변경하는지 기준으로 가장 가까운 적절한 위치에 두는 게 중요합니다.
-
-> 이제 상태 소유의 기준을 봤다. 다음은 가장 흔한 설계 선택 중 하나인 **상태 끌어올리기**다.
-
----
-
-## 56. 상태 끌어올리기는 언제 필요하고, 언제 과한가
-
-여러 컴포넌트가 같은 상태를 공유해야 할 때 매우 중요한 패턴이다.
-
-### 핵심 개념
-
-상태 끌어올리기는 공통으로 필요한 상태를
-가장 가까운 공통 부모 컴포넌트로 올리는 방식이다.
+### 과도한 끌어올리기의 문제
 
 ```tsx
-function Parent() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+// 너무 높이 올린 케이스
+function App() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTab, setSelectedTab] = useState("home");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [cartItems, setCartItems] = useState([]);
+  // ... 10개 이상의 state
 
+  // searchQuery가 바뀔 때마다 App 전체(Header, Main, Footer, Modal)가 리렌더
   return (
     <>
-      <Sidebar selectedId={selectedId} onSelect={setSelectedId} />
-      <Detail selectedId={selectedId} />
+      <Header query={searchQuery} onSearch={setSearchQuery} />
+      <TabBar tab={selectedTab} onSelect={setSelectedTab} />
+      <Main tab={selectedTab} cart={cartItems} />
+      <Modal open={modalOpen} />
+      <Footer />
     </>
   );
 }
 ```
 
-형제 컴포넌트끼리 같은 값을 각각 따로 관리하면 상태가 쉽게 어긋난다. 검색 필터 UI와 결과 리스트, 탭 선택 상태와 상세 뷰 같은 경우에 공통 부모가 상태를 들고 있는 게 더 자연스럽다.
+해결: **state를 사용하는 가장 가까운 곳으로 내린다.**
+
+```tsx
+function App() {
+  return (
+    <>
+      <SearchHeader />    {/* searchQuery는 여기 안에 */}
+      <TabSection />       {/* selectedTab은 여기 안에 */}
+      <CartProvider>       {/* cartItems는 필요한 범위만 */}
+        <Main />
+      </CartProvider>
+      <Footer />
+    </>
+  );
+}
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 이커머스 상품 페이지에서 "최근 본 상품" 사이드바와 "상품 상세" 메인 영역이 같은 `currentProductId`를 쓰는데, 각각 로컬 state로 관리하니 뒤로가기 시 사이드바만 이전 상품을 보여주는 버그. 공통 부모인 `ProductPage`로 state를 끌어올려서 해결.
 
 ### 자주 하는 오해
 
-- 공유되면 무조건 끌어올리는 게 정답이다 → 너무 높이 올리면 오히려 관리가 힘들다
-- 상태를 상위로 올릴수록 재사용성이 높다 → 리렌더 범위와 복잡도가 같이 커질 수 있다
+- 공유되면 무조건 전역 상태다 → **틀림.** 공통 부모에 두는 것만으로 충분한 경우가 많다.
+- 가장 상위에 두면 관리가 쉽다 → **리렌더 범위가 불필요하게 넓어진다.**
+- 로컬 상태는 작고 단순한 경우에만 쓴다 → **오히려 많은 UI 상태는 로컬이 더 적합하다.**
 
 ### 면접 압축 답변
 
-- **10초**: 상태 끌어올리기는 공유가 필요한 상태를 가장 가까운 공통 부모에 두는 패턴입니다.
-- **30초**: 형제 컴포넌트가 같은 상태를 각각 관리하면 어긋나기 쉬우므로, 공통 부모가 소유하고 props로 내려주는 게 더 안전합니다. 다만 무조건 위로 올리면 리렌더 범위가 커지므로, 필요한 범위까지만 올리는 판단이 중요합니다.
+- **10초**: state ownership은 어떤 상태를 어느 컴포넌트가 책임질지 정하는 문제입니다. 공유가 필요하면 가장 가까운 공통 부모로 끌어올립니다.
+- **30초**: 형제 컴포넌트가 같은 상태를 각각 관리하면 어긋나기 쉬우므로 공통 부모가 소유하고 props로 내려주는 게 안전합니다. 다만 너무 높이 올리면 리렌더 범위가 커지므로, 누가 읽고 누가 변경하는지 기준으로 가장 가까운 적절한 위치에 두는 판단이 중요합니다.
 
-> 이제 상태를 공통 부모로 올리는 패턴을 봤다. **그런데 너무 깊은 트리에서 props를 계속 내려줘야 하면 어떻게 하지?** 여기서 Context로 넘어간다.
+> 상태 끌어올리기를 봤다. **너무 깊은 트리에서 props를 계속 내려줘야 하면?** Context로 넘어간다.
 
 ---
 
-## 57. Context는 언제 유용하고, 언제 과용되기 쉬운가
+## 53. Context는 언제 유용하고, 언제 과용되기 쉬운가
 
-상태를 끌어올리다 보면 어느 순간 props 전달이 너무 길어진다. 그럴 때 Context가 자연스럽게 등장한다.
+> **TL;DR** — Context는 props drilling을 줄여주는 값 전달 도구다. 단, Context 값이 바뀌면 모든 구독자가 리렌더되므로 변경 빈도가 낮은 값에 적합하고, 관심사별로 분리해야 한다.
 
 ### 핵심 개념
-
-Context는 깊은 트리 아래로 값을 전달할 때 중간 props 전달을 줄여주는 메커니즘이다.
 
 ```tsx
 const ThemeContext = createContext<"light" | "dark">("light");
@@ -399,7 +310,6 @@ function App() {
     <ThemeContext.Provider value={theme}>
       <Header />
       <Main />
-      <Footer />
     </ThemeContext.Provider>
   );
 }
@@ -410,16 +320,18 @@ function DeepChild() {
 }
 ```
 
-많은 사람이 Context를 곧바로 "전역 상태관리"라고 부르는데, 정확히는 **전역적으로 접근 가능한 값 전달 구조**에 가깝다.
+### Context의 리렌더 특성 — 가장 중요한 포인트
 
-### Context의 중요한 리렌더 특성
-
-Context 값이 바뀌면, 해당 Context를 `useContext`로 구독하는 **모든 컴포넌트가 리렌더**된다. `React.memo`도 이걸 막지 못한다. 그래서 서로 관련 없는 상태를 하나의 Context에 묶으면 불필요한 리렌더가 생긴다.
+Context 값이 바뀌면 `useContext`로 구독하는 **모든 컴포넌트가 리렌더**된다. `React.memo`도 막지 못한다.
 
 ```tsx
 // Bad: 관련 없는 상태를 한 Context에 묶음
-const AppContext = createContext({ theme: "light", user: null, locale: "ko" });
-// theme만 바뀌어도 user만 쓰는 컴포넌트도 리렌더
+const AppContext = createContext({
+  theme: "light",
+  user: null,
+  locale: "ko",
+});
+// theme만 바뀌어도 user만 쓰는 컴포넌트도 리렌더!
 
 // Good: 관심사별로 Context를 분리
 const ThemeContext = createContext("light");
@@ -427,79 +339,160 @@ const UserContext = createContext(null);
 const LocaleContext = createContext("ko");
 ```
 
+### Context + useMemo — value 참조 안정화
+
+Provider의 `value`에 매번 새 객체를 넘기면 불필요한 리렌더가 생긴다.
+
+```tsx
+// Bad: 매 렌더마다 새 객체 → 모든 구독자 리렌더
+function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState("light");
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+// Good: useMemo로 value 안정화
+function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState("light");
+  const value = useMemo(() => ({ theme, setTheme }), [theme]);
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+```
+
+### Context가 적합한 것 vs 부적합한 것
+
+| 적합 | 부적합 |
+|---|---|
+| 테마, 로케일, 사용자 정보 | 빈번히 변하는 폼 입력값 |
+| 인증 상태 | 드래그 좌표 |
+| 기능 플래그 | 검색 결과 리스트 |
+| 변경 빈도 낮음, 구독자 많음 | 변경 빈도 높음, 부분 구독 필요 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 다국어 지원을 위해 `{ locale, translations, setLocale }`을 하나의 Context에 넣었더니, 번역 텍스트 하나를 바꿀 때마다 앱 전체가 리렌더됐다. `LocaleContext`(locale + setLocale)와 `TranslationsContext`(번역 데이터)를 분리하고, translations는 locale이 바뀔 때만 갱신되게 구조를 바꿔서 해결.
+
 ### 자주 하는 오해
 
-- Context만 쓰면 상태관리 문제는 끝난다 → 틀림
-- Context를 쓰면 성능 걱정은 없어도 된다 → Context 값 변경 시 모든 구독자가 리렌더된다.
-- 공유 상태는 다 Context가 정답이다 → 빈번히 변경되는 상태는 Context보다 외부 상태관리 도구가 더 적합할 수 있다.
+- Context만 쓰면 상태관리 문제는 끝난다 → **틀림.** Context는 "값 전달"이지 "상태관리"가 아니다.
+- Context를 쓰면 성능 걱정은 없다 → **값 변경 시 모든 구독자가 리렌더된다.**
+- 모든 공유 상태를 Context에 넣어야 한다 → **빈번히 변경되는 상태는 외부 도구가 더 적합하다.**
 
 ### 면접 압축 답변
 
-- **10초**: Context는 깊은 트리로 값을 전달할 때 props drilling을 줄여주는 도구입니다.
-- **30초**: 테마, 사용자 정보, 로케일처럼 변경 빈도가 낮은 공통 값에 잘 맞습니다. 단, Context 값이 바뀌면 모든 구독자가 리렌더되고 `React.memo`로도 막을 수 없으므로, 빈번히 바뀌는 상태나 관련 없는 상태를 한 Context에 묶으면 성능 문제가 생깁니다.
+- **10초**: Context는 props drilling을 줄여주지만, 값이 바뀌면 모든 구독자가 리렌더됩니다. 관심사별로 분리하고 변경 빈도가 낮은 값에 적합합니다.
+- **30초**: 테마, 로케일, 인증처럼 변경이 드문 공통 값에 잘 맞습니다. 관련 없는 상태를 하나에 묶으면 불필요한 리렌더가 생기고, Provider value에 매번 새 객체를 넘기면 `useMemo`로 안정화해야 합니다. 빈번히 바뀌는 상태나 부분 구독이 필요한 경우는 Zustand 같은 외부 도구가 더 적합합니다.
 
-> 이제 Context의 역할을 봤다. **그렇다면 Zustand나 Redux 같은 외부 상태관리 도구는 Context와 무엇이 다른가?**
+> Context의 한계를 봤다. **그렇다면 Zustand/Redux 같은 외부 도구는 무엇이 다른가?**
 
 ---
 
-## 58. Context와 Zustand/Redux는 어떤 문제를 다르게 푸나
+## 54. Context와 Zustand/Redux는 어떤 문제를 다르게 푸나
 
-Context를 보면 자연스럽게 "그럼 왜 Zustand나 Redux가 필요한가?"라는 질문이 나온다.
+> **TL;DR** — Context는 "값 전달", Zustand/Redux는 "상태 저장 + 구독 제어". 가장 큰 차이는 **selector로 부분 구독**이 가능한지 여부다.
 
-### 핵심 개념
+### 핵심 차이
 
-- Context는 **값 전달**에 초점
-- Zustand/Redux는 **상태 저장, 업데이트 흐름, 구독 구조 관리**에 초점
-
-가장 큰 실질적 차이는 **부분 구독(selector)**이다.
+| | Context | Zustand | Redux (Toolkit) |
+|---|---|---|---|
+| **본질** | 값 전달 메커니즘 | 경량 상태 저장소 | 상태 + 액션 흐름 관리 |
+| **부분 구독** | 불가 (전체 리렌더) | selector로 가능 | selector로 가능 |
+| **미들웨어** | 없음 | persist, devtools 등 | 풍부한 미들웨어 생태계 |
+| **보일러플레이트** | 최소 | 최소 | 중간 (Toolkit으로 개선) |
+| **DevTools** | React DevTools | Zustand devtools | Redux DevTools (시간 여행) |
+| **적합한 상태** | 테마, 로케일, 인증 | 일반적인 클라이언트 상태 | 엄격한 액션 추적이 필요할 때 |
 
 ```tsx
 // Context: theme이 바뀌면 user만 쓰는 컴포넌트도 리렌더
 const { user } = useContext(AppContext);
 
-// Zustand: selector로 user만 구독 — theme이 바뀌어도 리렌더 안 됨
+// Zustand: selector로 user만 구독 → theme이 바뀌어도 리렌더 안 됨
 const user = useStore((state) => state.user);
 ```
 
+### Zustand의 selector — 부분 구독의 핵심
+
+```tsx
+import { create } from "zustand";
+
+const useStore = create((set) => ({
+  user: null,
+  theme: "light",
+  setUser: (user) => set({ user }),
+  setTheme: (theme) => set({ theme }),
+}));
+
+// 이 컴포넌트는 user가 바뀔 때만 리렌더
+function UserAvatar() {
+  const user = useStore((state) => state.user);
+  return <img src={user?.avatar} />;
+}
+
+// 이 컴포넌트는 theme이 바뀔 때만 리렌더
+function ThemeToggle() {
+  const theme = useStore((state) => state.theme);
+  const setTheme = useStore((state) => state.setTheme);
+  return <button onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme}</button>;
+}
+```
+
+### 상태관리 도구 선택 가이드
+
+```
+이 상태를 어떤 도구로 관리할까?
+│
+├── 서버에서 가져오는 데이터? → React Query / SWR
+├── 변경 빈도가 낮고 어디서든 접근? → Context
+├── 부분 구독이 필요하거나 변경이 잦음? → Zustand
+├── 엄격한 액션 흐름과 시간 여행 디버깅? → Redux Toolkit
+└── 이 컴포넌트 안에서만 쓰임? → useState / useReducer
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 에디터 앱에서 캔버스 상태(선택된 요소, 줌 레벨, 도구 모드)를 Context로 관리했는데, 마우스 이동 시 줌 레벨만 읽는 컴포넌트까지 전부 리렌더되어 60fps를 못 맞췄다. Zustand로 전환하고 각 컴포넌트가 필요한 slice만 selector로 구독하니 리렌더가 줄어서 성능 회복.
+
 ### 자주 하는 오해
 
-- Zustand/Redux는 앱이 커야만 쓴다 → 틀림. 부분 구독이 필요하면 작은 앱에서도 유용하다.
-- Context로도 되는데 굳이 외부 상태관리 툴이 필요 없다 → 구독 제어와 업데이트 흐름에서 차이가 크다.
-- 외부 상태관리 도구를 쓰면 설계 고민이 사라진다 → 틀림. 어떤 상태를 넣을지는 여전히 설계 문제다.
-
-### 실무 감각
-
-| 상황 | 도구 |
-|------|------|
-| 사용자/테마/로케일 | Context 적합 |
-| 복잡한 인터랙션 편집 상태 | Zustand 적합 |
-| 엄격한 액션 흐름과 추적 필요 | Redux 적합 |
+- Zustand/Redux는 앱이 커야만 쓴다 → **부분 구독이 필요하면 작은 앱에서도 유용하다.**
+- Context로도 되는데 외부 도구가 불필요하다 → **구독 제어에서 차이가 크다.**
+- 외부 상태관리 도구를 쓰면 설계 고민이 사라진다 → **어떤 상태를 넣을지는 여전히 설계 문제.**
 
 ### 면접 압축 답변
 
-- **10초**: Context는 값 전달, Zustand/Redux는 상태 저장과 구독 구조 관리에 초점이 다릅니다.
-- **30초**: Context 값이 바뀌면 모든 구독자가 리렌더되지만, Zustand는 selector로 필요한 조각만 구독해서 불필요한 리렌더를 막습니다. 그래서 둘은 대체 관계라기보다 문제 축이 다른 도구입니다.
+- **10초**: Context는 값 전달, Zustand/Redux는 상태 저장과 부분 구독에 초점이 다릅니다. selector로 필요한 조각만 구독할 수 있는지가 가장 큰 차이입니다.
+- **30초**: Context 값이 바뀌면 모든 구독자가 리렌더되지만, Zustand는 selector로 특정 slice만 구독해서 불필요한 리렌더를 막습니다. 서버 데이터는 React Query, 변경 빈도 낮은 공통값은 Context, 부분 구독이 필요하면 Zustand, 엄격한 액션 추적이 필요하면 Redux Toolkit이 적합합니다.
 
-> 이제 클라이언트 상태 구조를 봤다. **그런데 서버에서 받아오는 데이터도 같은 방식으로 다뤄야 할까?** 여기서 server state와 client state로 넘어간다.
+> 클라이언트 상태 구조를 봤다. **서버에서 받아오는 데이터도 같은 방식으로 다뤄야 할까?**
 
 ---
 
-## 59. client state와 server state는 왜 구분해야 하나
+## 55. client state와 server state는 왜 구분해야 하나
 
-예전에는 상태를 전부 "그냥 state"로 뭉뚱그려 생각하기 쉬웠지만,
-실무에서는 client state와 server state를 나눠 보는 게 훨씬 선명하다.
+> **TL;DR** — client state는 브라우저 안에서 완결되는 UI 상태, server state는 서버와 동기화가 필요한 데이터다. 둘을 구분해야 어떤 도구로 관리할지 판단이 쉬워진다.
 
-### 핵심 개념
+### 핵심 비교
 
-**client state**: 브라우저 안에서 사용자가 조작하며 유지하는 UI 중심 상태 (모달 열림, 탭 선택, 입력 중인 값, 드래그 좌표)
+| | client state | server state |
+|---|---|---|
+| **예시** | 모달 열림, 탭 선택, 드래그 좌표 | 유저 프로필, 게시글 목록, 검색 결과 |
+| **소유자** | 브라우저 (클라이언트) | 서버 (원본은 DB) |
+| **동기화** | 불필요 | 서버와 동기화 필요 |
+| **캐싱** | 불필요 | 필요 (같은 데이터 중복 요청 방지) |
+| **stale 문제** | 없음 | 있음 (서버가 바뀌었을 수 있음) |
+| **적합한 도구** | useState, useReducer, Zustand | React Query, SWR |
 
-**server state**: 서버에서 가져오고, 다시 동기화가 필요하며, 캐싱/재요청/stale 문제가 있는 상태 (사용자 프로필, 게시글 목록, 검색 결과)
-
-### server state를 useState로만 다루면 생기는 문제
+### useState로 server state를 다루면 생기는 문제
 
 ```tsx
-// 이렇게 하면 금방 한계에 부딪힌다
-function UserProfile({ userId }: { userId: string }) {
+function UserProfile({ userId }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -513,52 +506,39 @@ function UserProfile({ userId }: { userId: string }) {
       .finally(() => setLoading(false));
   }, [userId]);
 
-  // 매 컴포넌트마다 loading/error/data 3개 state 반복
-  // 캐싱 없음, stale 관리 없음, 재요청 전략 없음
-  // 여러 컴포넌트가 같은 데이터를 요청하면 중복 fetch
+  // 문제점:
+  // 1. 매 컴포넌트마다 loading/error/data 3개 state 반복
+  // 2. 캐싱 없음 — 같은 userId를 다시 열면 또 fetch
+  // 3. stale 관리 없음 — 서버가 바뀌어도 모름
+  // 4. 중복 요청 — 여러 컴포넌트가 같은 데이터 요청
+  // 5. race condition 대응 — 직접 구현해야 함
 }
 ```
 
-### 자주 하는 오해
-
-- 서버에서 온 값도 일단 state면 다 똑같다 → 틀림. 캐싱, stale, 재요청이라는 추가 차원이 있다.
-- React state만 잘 쓰면 서버 데이터도 충분히 관리 가능하다 → 규모가 커질수록 반복 코드와 누락이 많아진다.
-
-### 면접 압축 답변
-
-- **10초**: client state는 UI 조작 상태, server state는 서버 동기화가 필요한 데이터입니다.
-- **30초**: client state는 모달/탭/입력처럼 브라우저 안에서 완결되고, server state는 캐싱/재요청/stale 관리가 필요합니다. 이 둘을 구분해야 어떤 상태를 로컬로 둘지, 어떤 상태를 별도 도구로 다룰지 판단이 쉬워집니다.
-
-> 이제 상태를 큰 축에서 나눴다. 자연스럽게 **React Query 같은 서버 상태 라이브러리는 왜 필요한가**로 넘어간다.
-
----
-
-## 60. React Query 같은 서버 상태 도구는 왜 필요하나
-
-server state를 별도로 구분했다면, 왜 전용 도구가 필요한지도 자연스럽게 보인다.
-
-### 핵심 개념
-
-React Query 같은 도구는 서버 데이터를 단순 저장하는 게 아니라:
-
-- 캐싱 / 재요청 / stale 관리
-- background refetch
-- loading / error 상태 표준화
-- mutation 이후 invalidation
-
-을 함께 다룬다.
+### React Query로 바꾸면
 
 ```tsx
-// React Query를 쓰면
-function UserProfile({ userId }: { userId: string }) {
+function UserProfile({ userId }) {
   const { data: user, isLoading, error } = useQuery({
     queryKey: ["user", userId],
     queryFn: () => fetch(`/api/users/${userId}`).then((r) => r.json()),
-    staleTime: 5 * 60 * 1000, // 5분간 fresh
+    staleTime: 5 * 60 * 1000,  // 5분간 fresh
   });
-  // 캐싱, 중복 요청 제거, stale 관리, loading/error가 자동
+  // 캐싱, 중복 요청 제거, stale 관리, background refetch가 자동
 }
+```
 
+### React Query 핵심 개념
+
+| 개념 | 설명 |
+|---|---|
+| **staleTime** | 데이터가 fresh로 간주되는 시간 (기본 0) — 이 시간 동안은 refetch 안 함 |
+| **gcTime** (구 cacheTime) | 비활성 데이터가 메모리에 유지되는 시간 (기본 5분) |
+| **background refetch** | 컴포넌트 마운트, 윈도우 포커스 시 자동 재요청 |
+| **invalidation** | mutation 후 관련 쿼리를 무효화해서 최신 데이터 fetch |
+| **optimistic update** | 서버 응답 전에 UI를 먼저 업데이트하고, 실패 시 롤백 |
+
+```tsx
 // mutation 후 관련 데이터 무효화
 const mutation = useMutation({
   mutationFn: updateUser,
@@ -566,41 +546,56 @@ const mutation = useMutation({
     queryClient.invalidateQueries({ queryKey: ["user"] });
   },
 });
+
+// optimistic update 패턴
+const mutation = useMutation({
+  mutationFn: toggleLike,
+  onMutate: async (postId) => {
+    await queryClient.cancelQueries({ queryKey: ["post", postId] });
+    const previous = queryClient.getQueryData(["post", postId]);
+    queryClient.setQueryData(["post", postId], (old) => ({
+      ...old, liked: !old.liked,
+    }));
+    return { previous };
+  },
+  onError: (err, postId, context) => {
+    queryClient.setQueryData(["post", postId], context.previous); // 롤백
+  },
+});
 ```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 게시판에서 글 작성 후 목록 페이지로 돌아왔는데 방금 쓴 글이 안 보이는 버그. 원인은 목록 데이터가 이전 캐시를 보여주고 있었기 때문. mutation `onSuccess`에서 `queryClient.invalidateQueries(["posts"])`를 호출해서 목록을 무효화하니 해결.
 
 ### 자주 하는 오해
 
-- fetch는 어차피 `useEffect`에서 하면 된다 → 반복 구조가 금방 늘어난다
-- 서버 데이터도 Zustand/Redux에 넣으면 끝이다 → 캐시 무효화와 stale 전략까지 직접 설계해야 한다
+- 서버에서 온 값도 다 같은 state다 → **캐싱, stale, 재요청이라는 추가 차원이 있다.**
+- React Query가 있으면 Zustand가 필요 없다 → **역할이 다르다.** 서버 데이터는 React Query, UI 상태는 Zustand/useState.
+- useEffect + fetch면 충분하다 → **규모가 커질수록 반복 코드와 누락이 많아진다.**
 
 ### 면접 압축 답변
 
-- **10초**: React Query는 서버 데이터의 캐싱, 재요청, stale 관리를 자동화하는 도구입니다.
-- **30초**: useState + useEffect로 매번 loading/error/data를 반복하는 대신, 선언적으로 서버 데이터를 관리합니다. 캐싱, background refetch, mutation 후 invalidation까지 다루므로, 서버 상태를 로컬 state와 같은 방식으로 다루는 것보다 훨씬 자연스럽습니다.
+- **10초**: client state는 UI 조작 상태(useState/Zustand), server state는 캐싱과 동기화가 필요한 데이터(React Query)입니다.
+- **30초**: client state는 모달/탭/입력처럼 브라우저 안에서 완결되고, server state는 캐싱, stale 관리, background refetch, mutation 후 invalidation이 필요합니다. React Query는 이런 server state 패턴을 자동화하고, staleTime/gcTime으로 캐시 전략을, optimistic update로 체감 성능을 제어합니다.
 
-> 이제 상태 구조가 꽤 정리됐다. 다음엔 복잡한 상태 전환을 다루는 useReducer로 넘어간다.
+> 상태의 큰 축을 나눴다. 이제 복잡한 상태 전환을 다루는 **useReducer**, 렌더링 우선순위를 제어하는 **concurrent features**, 그리고 구조 설계의 나머지 축들로 넘어간다.
 
 ---
 
-## 61. useReducer는 언제 useState 대신 쓰나
+## 56. useReducer는 언제 useState 대신 쓰나
 
-useState가 가장 기본적인 상태 관리 도구라면,
-useReducer는 **상태 전환 로직이 복잡해질 때** 쓰는 도구다.
-
-### 핵심 개념
-
-useReducer는 현재 상태와 액션을 받아 다음 상태를 반환하는 **리듀서 함수**를 기반으로 동작한다.
-다음 상태가 이전 상태 + 액션의 조합으로 결정될 때 useState보다 구조가 깔끔해진다.
+> **TL;DR** — 다음 상태가 "이전 상태 + 액션"으로 결정되고, 여러 값이 함께 변하거나 전환 조건이 복잡할 때 useReducer가 useState보다 구조적이다.
 
 ### useState vs useReducer 판단 기준
 
 | useState가 적합할 때 | useReducer가 적합할 때 |
-|---------------------|----------------------|
+|---|---|
 | 독립적인 단일 값 (모달 열림, 입력값) | 여러 값이 함께 변하는 복합 상태 |
 | 전환 로직이 단순 (토글, 증가) | 상태 전환에 조건 분기가 많을 때 |
-| 상태 간 의존성이 없을 때 | 다음 상태가 이전 상태 + 액션 종류에 따라 달라질 때 |
+| 상태 간 의존성이 없을 때 | 다음 상태가 이전 상태 + 액션 종류로 결정 |
 
-### 코드 예시: 폼 + 검증 상태
+### 실무 예시: 폼 + 검증 상태
 
 ```tsx
 type FormState = {
@@ -611,7 +606,6 @@ type FormState = {
 
 type FormAction =
   | { type: "SET_FIELD"; field: string; value: string }
-  | { type: "SET_ERROR"; field: string; error: string }
   | { type: "SUBMIT_START" }
   | { type: "SUBMIT_SUCCESS" }
   | { type: "SUBMIT_FAILURE"; errors: Record<string, string> };
@@ -622,12 +616,7 @@ function formReducer(state: FormState, action: FormAction): FormState {
       return {
         ...state,
         values: { ...state.values, [action.field]: action.value },
-        errors: { ...state.errors, [action.field]: undefined },
-      };
-    case "SET_ERROR":
-      return {
-        ...state,
-        errors: { ...state.errors, [action.field]: action.error },
+        errors: { ...state.errors, [action.field]: undefined }, // 입력 시 에러 클리어
       };
     case "SUBMIT_START":
       return { ...state, isSubmitting: true };
@@ -637,76 +626,50 @@ function formReducer(state: FormState, action: FormAction): FormState {
       return { ...state, isSubmitting: false, errors: action.errors };
   }
 }
-
-function SignupForm() {
-  const [state, dispatch] = useReducer(formReducer, {
-    values: { name: "", email: "" },
-    errors: {},
-    isSubmitting: false,
-  });
-
-  return (
-    <form>
-      <input
-        value={state.values.name}
-        onChange={(e) =>
-          dispatch({ type: "SET_FIELD", field: "name", value: e.target.value })
-        }
-      />
-      {state.errors.name && <span>{state.errors.name}</span>}
-      {/* ... */}
-    </form>
-  );
-}
 ```
 
-이 예시에서 `SET_FIELD`는 값 변경과 동시에 해당 필드의 에러를 초기화한다.
-useState 여러 개로 이걸 하면 `setValues`, `setErrors`를 매번 함께 호출해야 하고, 빠뜨리기 쉽다.
+`SET_FIELD`에서 값 변경과 에러 클리어를 동시에 처리한다. useState 여러 개로 하면 `setValues`, `setErrors`를 매번 함께 호출해야 하고, 빠뜨리기 쉽다.
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 회원가입 폼에서 `useState` 5개(이름, 이메일, 비밀번호, 에러, 제출 중)를 관리하다가 필드 변경 시 에러를 클리어하는 로직을 빠뜨려서 "이미 수정했는데 에러가 안 사라져요" 버그. useReducer로 바꾸면서 SET_FIELD 액션에 에러 클리어를 함께 넣으니 누락 불가.
 
 ### 자주 하는 오해
 
-- useReducer는 Redux의 축소판이다 → 비슷한 패턴이지만 완전히 다른 도구다. 미들웨어, 전역 스토어 개념이 없다.
-- 복잡한 앱에서만 쓴다 → 상태 2~3개가 함께 바뀌는 경우에도 충분히 유용하다.
-- useReducer를 쓰면 성능이 좋아진다 → 본질은 상태 전환 로직의 응집도다.
+- useReducer는 Redux의 축소판이다 → **비슷한 패턴이지만 미들웨어, 전역 스토어 개념이 없다.**
+- 복잡한 앱에서만 쓴다 → **상태 2~3개가 함께 바뀌는 경우에도 유용하다.**
 
 ### 면접 압축 답변
 
-- **10초**: useReducer는 다음 상태가 이전 상태와 액션의 조합으로 결정될 때, useState보다 상태 전환 로직을 명확하게 관리할 수 있는 훅입니다.
-- **30초**: 여러 상태 값이 함께 변하거나 전환 조건이 복잡할 때 useReducer를 씁니다. 리듀서 함수에 전환 로직을 모아두면 컴포넌트는 dispatch만 호출하면 되고, 상태 전환 규칙을 한 곳에서 관리할 수 있습니다. 단순한 독립 값이면 useState가 더 적합합니다.
-
-> 이제 복잡한 상태 전환을 다루는 도구를 봤다. 다음엔 React 18이 도입한 **concurrent features가 왜 중요한지**로 넘어간다.
+- **10초**: useReducer는 다음 상태가 이전 상태와 액션의 조합으로 결정될 때, 상태 전환 로직을 한 곳에 모아 관리하는 훅입니다.
+- **30초**: 여러 상태 값이 함께 변하거나 전환 조건이 복잡할 때 사용합니다. 리듀서 함수에 전환 규칙을 모아두면 컴포넌트는 `dispatch`만 호출하면 됩니다. Immer와 함께 쓰면 중첩 상태 업데이트도 간결해집니다.
 
 ---
 
-## 62. React 18 concurrent features는 왜 중요한가
+## 57. React 18 concurrent features
 
-React 18부터 도입된 concurrent features는 렌더링 자체의 우선순위를 다루는 새로운 축이다.
+> **TL;DR** — React 18은 렌더링에 우선순위를 부여해서, 급한 업데이트(입력)가 덜 급한 렌더링(리스트)을 기다리지 않게 한다. `useTransition`, `useDeferredValue`, `Suspense`가 핵심.
 
-### 핵심 개념
+### 세 가지 핵심 도구
 
-기존 React 렌더링은 한 번 시작하면 끝까지 완료해야 했다.
-Concurrent features는 **렌더링을 중단하고, 더 급한 업데이트를 먼저 처리**할 수 있게 해준다.
+| 도구 | 역할 | 제어 지점 |
+|---|---|---|
+| `useTransition` | 상태 업데이트를 non-urgent로 표시 | 업데이트 발생 쪽 |
+| `useDeferredValue` | 값의 반영을 지연 | 값 소비 쪽 |
+| `Suspense` | 비동기 데이터 로딩의 선언적 처리 | UI 표시 쪽 |
 
-핵심 도구 세 가지:
-
-- **Suspense**: 비동기 데이터가 준비될 때까지 fallback UI를 보여준다
-- **useTransition**: 상태 업데이트를 non-urgent로 표시해 UI 응답성을 유지한다
-- **useDeferredValue**: 값의 반영을 지연시켜 비싼 렌더링을 뒤로 미룬다
-
-### useTransition 예시: 검색 입력 + 무거운 리스트
+### useTransition — 입력 응답성 유지
 
 ```tsx
 function SearchPage() {
   const [query, setQuery] = useState("");
+  const [filterQuery, setFilterQuery] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setQuery(value); // 입력은 즉시 반영 (urgent)
-
+  const handleChange = (e) => {
+    setQuery(e.target.value);          // urgent — 입력 즉시 반영
     startTransition(() => {
-      // 리스트 필터링은 non-urgent — 입력이 먼저
-      setFilterQuery(value);
+      setFilterQuery(e.target.value);  // non-urgent — 리스트 필터링은 나중에
     });
   };
 
@@ -720,13 +683,10 @@ function SearchPage() {
 }
 ```
 
-`startTransition` 안의 상태 업데이트는 urgent 업데이트(타이핑)에 양보한다.
-사용자 입력이 끊기지 않으면서 리스트 렌더링은 여유가 생길 때 수행된다.
-
-### useDeferredValue 예시: 비싼 컴포넌트 지연 렌더링
+### useDeferredValue — 비싼 렌더링 지연
 
 ```tsx
-function SearchResults({ query }: { query: string }) {
+function SearchResults({ query }) {
   const deferredQuery = useDeferredValue(query);
   const isStale = query !== deferredQuery;
 
@@ -738,12 +698,15 @@ function SearchResults({ query }: { query: string }) {
 }
 ```
 
-`useDeferredValue`는 값 자체를 지연시킨다. 새 값이 들어오면 이전 값으로 먼저 렌더하고, 여유가 생기면 새 값으로 다시 렌더한다. `useTransition`이 상태 업데이트를 감싸는 것이라면, `useDeferredValue`는 소비 쪽에서 값을 지연시키는 것이다.
+| | `useTransition` | `useDeferredValue` |
+|---|---|---|
+| **제어 대상** | 상태 업데이트를 감쌈 | 값을 지연시킴 |
+| **사용 위치** | 업데이트를 발생시키는 쪽 | 값을 소비하는 쪽 |
+| **`isPending`** | 있음 | 없음 (`query !== deferredQuery`로 판단) |
 
-### Suspense와 데이터 패칭
+### Suspense — 선언적 로딩 처리
 
 ```tsx
-// React 18+ Suspense (프레임워크 또는 use() 훅과 함께)
 function App() {
   return (
     <Suspense fallback={<Skeleton />}>
@@ -753,180 +716,78 @@ function App() {
 }
 ```
 
-Suspense는 하위 컴포넌트가 데이터를 기다리는 동안 fallback을 보여준다.
-Next.js 같은 프레임워크나 React의 `use()` 훅과 함께 쓰면 선언적으로 로딩 상태를 처리할 수 있다.
+Suspense는 하위 컴포넌트가 데이터를 기다리는 동안 fallback을 보여준다. Next.js나 React Query의 `suspense: true` 옵션과 함께 쓰면 선언적으로 로딩 상태를 처리할 수 있다.
 
-### 자주 하는 오해
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- concurrent features를 쓰면 무조건 빨라진다 → 틀림. 렌더 자체가 빨라지는 게 아니라 우선순위 제어로 체감 응답성이 좋아지는 것이다.
-- useTransition과 useDeferredValue는 같은 것이다 → useTransition은 업데이트를 감싸고, useDeferredValue는 값을 지연시킨다. 제어 지점이 다르다.
-- Suspense는 React Query 없이 단독으로 데이터를 불러올 수 있다 → Suspense 자체는 대기/표시 메커니즘이고, 데이터 패칭은 별도 통합이 필요하다.
+> 10만 행 테이블에서 필터 입력 시 매 키 입력마다 테이블 전체가 리렌더되면서 입력이 끊기는 현상. `useTransition`으로 필터 업데이트를 non-urgent로 표시하니, 입력은 즉시 반영되고 테이블은 여유가 생길 때 업데이트. `isPending`으로 "필터링 중..." 표시까지 추가.
 
 ### 면접 압축 답변
 
-- **10초**: React 18의 concurrent features는 렌더링에 우선순위를 부여해서, 급한 업데이트가 덜 급한 렌더링을 기다리지 않게 합니다.
-- **30초**: useTransition으로 무거운 상태 업데이트를 non-urgent로 표시하면 사용자 입력 응답성이 유지되고, useDeferredValue로 비싼 렌더링을 지연시킬 수 있습니다. Suspense는 비동기 데이터의 로딩 상태를 선언적으로 처리합니다. 이 세 가지가 합쳐져 체감 성능을 크게 개선합니다.
-
-> 이제 렌더링 우선순위까지 봤다. 다음엔 복잡해지는 로직을 UI에서 분리하는 기준, 즉 커스텀 훅으로 넘어간다.
+- **10초**: React 18의 concurrent features는 렌더링에 우선순위를 부여해서 급한 업데이트가 덜 급한 렌더링을 기다리지 않게 합니다.
+- **30초**: `useTransition`은 상태 업데이트를 non-urgent로 표시해 입력 응답성을 유지하고, `useDeferredValue`는 값의 반영을 지연시켜 비싼 렌더링을 뒤로 미룹니다. Suspense는 비동기 데이터의 로딩을 선언적으로 처리합니다. 핵심은 렌더 자체가 빨라지는 게 아니라 우선순위 제어로 체감 응답성이 좋아지는 것입니다.
 
 ---
 
-## 63. 커스텀 훅은 언제 분리하는 게 좋은가
+## 58. 커스텀 훅, controlled/uncontrolled, 에러 바운더리
 
-React를 쓰다 보면 컴포넌트 안에 로직이 점점 쌓인다. 흔히 "이걸 커스텀 훅으로 빼야 하나?"라는 고민이 나온다.
+> **TL;DR** — 커스텀 훅은 재사용 가능한 상태+효과 묶음 추출, controlled/uncontrolled은 폼 값 관리 방식, 에러 바운더리는 렌더링 에러 격리 구조. 세 가지 모두 React 구조 설계의 실전 도구다.
 
-### 핵심 개념
-
-커스텀 훅은 단순 코드 분리 도구가 아니라, **재사용 가능한 상태/효과/행동의 묶음**을 추출하는 방식이다.
+### 커스텀 훅 — 언제 분리하나
 
 ```tsx
-// 디바운스 훅 — 여러 컴포넌트에서 재사용
+// 재사용 가능한 디바운스 훅
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
-
   useEffect(() => {
     const id = setTimeout(() => setDebounced(value), delay);
     return () => clearTimeout(id);
   }, [value, delay]);
-
   return debounced;
 }
-
-// 토글 훅 — 상태 전환 로직을 캡슐화
-function useToggle(initial = false) {
-  const [value, setValue] = useState(initial);
-  const toggle = useCallback(() => setValue((v) => !v), []);
-  return [value, toggle] as const;
-}
 ```
 
-### 언제 분리하면 좋은가
+분리 기준: **여러 곳에서 반복** 또는 **컴포넌트가 UI보다 로직이 더 길어질 때**. 한 곳 전용이라도 읽기와 책임 분리에 가치가 있을 수 있다.
 
-- 여러 컴포넌트에서 같은 로직이 반복될 때
-- UI보다 상태 전환/비즈니스 규칙이 더 길어질 때
-- 컴포넌트가 읽기 어려워질 때
-- 테스트나 책임 분리가 필요할 때
+### controlled vs uncontrolled
 
-### 자주 하는 오해
-
-- 길어지면 무조건 훅으로 뺀다 → 너무 쪼개면 오히려 추적이 어려워질 수 있다
-- 훅으로 분리하면 성능도 좋아진다 → 본질은 책임 분리다. 성능과는 직접 관련 없다.
-- 훅은 재사용될 때만 의미 있다 → 한 곳 전용이라도 읽기와 책임 분리에 가치가 있을 수 있다
-
-### 면접 압축 답변
-
-- **10초**: 커스텀 훅은 재사용 가능한 상태와 효과의 묶음을 추출하는 방식입니다.
-- **30초**: 여러 컴포넌트에서 같은 상태 전환이나 비즈니스 로직이 반복될 때 분리하면 좋습니다. 단순히 코드 길이가 아니라 책임이 뚜렷해지는지가 기준이며, 한 곳 전용이라도 컴포넌트를 선언적으로 만드는 데 가치가 있을 수 있습니다.
-
-> 이제 로직 분리 기준을 봤다. 다음엔 폼 같은 입력 중심 UI에서 자주 나오는 **controlled / uncontrolled**로 넘어간다.
-
----
-
-## 64. controlled와 uncontrolled는 왜 폼 설계에서 중요하나
-
-폼은 React에서 아주 대표적인 상태 설계 문제다.
-
-### 핵심 개념
-
-**controlled**: 입력값을 React state가 직접 관리하는 방식
+| | controlled | uncontrolled |
+|---|---|---|
+| **값의 주인** | React state | DOM |
+| **값 접근** | state 변수 | ref로 읽기 |
+| **즉시 검증/포맷** | 가능 | 어려움 |
+| **리렌더** | 매 입력마다 | 최소화 |
+| **대표 라이브러리** | 직접 useState | react-hook-form |
 
 ```tsx
-function ControlledInput() {
-  const [value, setValue] = useState("");
+// controlled: React state가 값을 관리
+const [value, setValue] = useState("");
+<input value={value} onChange={(e) => setValue(e.target.value)} />
 
-  return <input value={value} onChange={(e) => setValue(e.target.value)} />;
-  // React state가 진짜 값 → 즉시 검증, 포맷팅 가능
-}
+// uncontrolled: DOM이 값을 들고 있음
+const ref = useRef<HTMLInputElement>(null);
+<input ref={ref} defaultValue="" />
+// 제출 시: ref.current?.value
 ```
 
-**uncontrolled**: DOM 자체가 값을 들고 있고, 필요할 때 ref 등으로 읽는 방식
+실무에서 `react-hook-form`은 uncontrolled 기반으로 리렌더를 최소화하면서 Zod 연동까지 지원한다.
 
-```tsx
-function UncontrolledInput() {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleSubmit = () => {
-    console.log(inputRef.current?.value); // 제출 시점에만 값을 읽음
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input ref={inputRef} defaultValue="" />
-      <button type="submit">제출</button>
-    </form>
-  );
-}
-```
-
-### 자주 하는 오해
-
-- React 폼은 무조건 controlled가 정답이다 → 틀림. 단순 제출형 폼에선 uncontrolled이 더 간단할 수 있다.
-- uncontrolled는 구식 방식이다 → 틀림. `react-hook-form` 같은 현대적 라이브러리도 uncontrolled 기반이다.
-
-### 면접 압축 답변
-
-- **10초**: controlled는 React state가 값을 관리, uncontrolled는 DOM이 값을 들고 있다가 필요 시 읽는 방식입니다.
-- **30초**: 즉시 검증이나 값 기반 UI 제어가 중요하면 controlled가 잘 맞고, 단순 제출형 폼은 uncontrolled도 충분히 실용적입니다. `react-hook-form`처럼 uncontrolled 기반으로 성능을 최적화하는 라이브러리도 있습니다.
-
-> 폼 입력 방식을 봤다면, 다음엔 렌더링 중 에러를 어떻게 격리할지, 즉 에러 바운더리로 넘어간다.
-
----
-
-## 65. 에러 바운더리는 왜 React 구조 설계에서 중요하나
-
-대부분의 학습자는 happy path 중심으로 React를 이해한다.
-하지만 실제 서비스에서는 실패를 어디서 어떻게 격리할지도 중요하다.
-
-### 핵심 개념
-
-에러 바운더리는 하위 트리에서 발생한 **렌더링 중 에러**를 잡아 전체 앱이 다 같이 무너지는 걸 막고, fallback UI를 보여줄 수 있게 해준다.
-
-### 에러 바운더리가 잡는 것과 못 잡는 것
+### 에러 바운더리 — 실패 격리
 
 | 잡는다 | 못 잡는다 |
-|--------|-----------|
-| 렌더링 중 throw | 이벤트 핸들러 안의 에러 |
-| useEffect/useLayoutEffect 안의 에러 | 비동기 코드 (setTimeout, fetch) |
-| 생명주기 메서드 안의 에러 | 서버 사이드 렌더링 에러 |
+|---|---|
+| 렌더링 중 throw | 이벤트 핸들러 에러 |
+| useEffect 안 에러 | 비동기 코드 (setTimeout, fetch) |
 | 하위 컴포넌트 트리 | 에러 바운더리 자체의 에러 |
 
-### 구현
-
-에러 바운더리는 클래스 컴포넌트에서만 구현 가능하다. 직접 구현하면 아래와 같다:
-
 ```tsx
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error(error, info.componentStack);
-  }
-
-  render() {
-    if (this.state.hasError) return this.props.fallback;
-    return this.props.children;
-  }
-}
-```
-
-`getDerivedStateFromError`로 에러 발생 시 상태를 바꾸고, `componentDidCatch`로 에러 정보를 로깅한다. 실무에서는 이걸 직접 만들기보다 `react-error-boundary`를 더 많이 쓴다.
-
-```tsx
-// react-error-boundary 사용
 import { ErrorBoundary } from "react-error-boundary";
 
 function App() {
   return (
     <ErrorBoundary fallback={<p>앱 전체 오류</p>}>
       <Header />
-      <ErrorBoundary fallback={<p>콘텐츠 영역 오류</p>}>
+      <ErrorBoundary fallback={<p>콘텐츠 오류</p>}>
         <MainContent />
       </ErrorBoundary>
       <Footer />
@@ -935,59 +796,28 @@ function App() {
 }
 ```
 
-이벤트 핸들러의 에러는 에러 바운더리가 못 잡으므로 별도로 처리해야 한다.
+배치 전략: **앱 최상단**(마지막 안전망) + **라우트 단위**(페이지 격리) + **위젯 단위**(차트 깨져도 나머지 동작).
 
-```tsx
-function SubmitButton() {
-  const handleClick = async () => {
-    try {
-      await submitData();
-    } catch (e) {
-      // 이벤트 핸들러 에러는 try/catch로 직접 처리
-      showErrorToast(e);
-    }
-  };
-  return <button onClick={handleClick}>제출</button>;
-}
-```
+### 실무 에피소드 — 이런 상황에서 만난다
 
-### 배치 전략
-
-- **앱 최상단**: 전체 앱 crash 방지 (마지막 안전망)
-- **라우트/페이지 단위**: 한 페이지 오류가 다른 페이지에 영향 안 줌
-- **위젯/패널 단위**: 차트나 추천 위젯이 깨져도 나머지는 동작
-
-### 자주 하는 오해
-
-- 에러 바운더리가 모든 에러를 잡는다 → 이벤트 핸들러, 비동기 에러는 못 잡는다
-- 앱 최상단 하나면 충분하다 → 화면 구성에 따라 세분화가 더 낫다
-
-### 면접 압축 답변
-
-- **10초**: 에러 바운더리는 하위 트리의 렌더링 에러를 격리해 전체 앱 crash를 막는 구조입니다.
-- **30초**: 렌더링 중 에러와 useEffect 에러는 잡지만, 이벤트 핸들러와 비동기 에러는 별도 처리가 필요합니다. 앱/라우트/위젯 레벨로 세분화해서 배치하면 장애 범위를 좁히고 복구 UI를 제공할 수 있습니다.
-
-> 이제 React 구조 설계에서 실패를 다루는 축도 봤다. 마지막으로 복잡한 UI에서 상태를 어떻게 나눠야 하는지로 넘어간다.
+> 추천 위젯에서 API 에러가 나면 전체 대시보드가 흰 화면이 되는 장애. 추천 위젯을 ErrorBoundary로 감싸고 "추천을 불러올 수 없습니다" fallback을 보여주도록 변경. 나머지 대시보드(차트, 테이블)는 정상 동작.
 
 ---
 
-## 66. 복잡한 UI에서는 상태를 어떻게 나눠야 하나
+## 59. 복잡한 UI에서는 상태를 어떻게 나눠야 하나
 
-단순 폼이나 버튼은 상태 구조가 비교적 간단하다.
-하지만 편집기, DnD, 차트, 애니메이션 많은 UI에선 상태를 한 덩어리로 두면 금방 꼬인다.
+> **TL;DR** — 상태를 영속/일시/파생/서버로 분류하고 역할별로 관리한다. 파생 상태를 `useState + useEffect`로 동기화하는 건 흔한 안티패턴이다.
 
-### 핵심 개념
-
-복잡한 UI에서는 상태를 역할별로 나눠 보는 게 좋다.
+### 상태 역할별 분류
 
 | 종류 | 설명 | 관리 위치 |
-|------|------|-----------|
-| 영속 상태 | 저장 대상 (DB에 반영) | 서버 상태 도구 (React Query 등) |
-| 일시 상태 | hover, drag, focus | 로컬 state |
-| 파생 상태 | 기존 상태로부터 계산 | `useMemo` 또는 일반 변수 |
-| 서버 상태 | 외부에서 동기화 | 서버 상태 도구 |
+|---|---|---|
+| **영속 상태** | 저장 대상 (DB 반영) | 서버 상태 도구 (React Query) |
+| **일시 상태** | hover, drag, focus, 모달 열림 | 로컬 useState |
+| **파생 상태** | 기존 상태에서 계산 가능한 값 | `useMemo` 또는 일반 변수 |
+| **서버 상태** | 외부에서 동기화 필요 | React Query / SWR |
 
-### 파생 상태의 흔한 안티패턴
+### 파생 상태 안티패턴
 
 ```tsx
 // Bad: 파생 상태를 useState + useEffect로 동기화
@@ -995,54 +825,69 @@ const [filteredItems, setFilteredItems] = useState([]);
 useEffect(() => {
   setFilteredItems(items.filter((i) => i.category === selected));
 }, [items, selected]);
-// 불필요한 state + effect + 한 틱 지연
+// 불필요한 state + effect + 한 틱 지연 + 동기화 버그 가능
 
 // Good: useMemo 또는 렌더 중 직접 계산
 const filteredItems = useMemo(
   () => items.filter((i) => i.category === selected),
-  [items, selected]
+  [items, selected],
 );
 // state가 아니라 계산값 — 동기화 문제 없음
 ```
 
+### 상태 정규화 — 복잡한 데이터 구조
+
+```tsx
+// Bad: 중첩 배열 — 특정 아이템 업데이트가 번거로움
+const [boards, setBoards] = useState([
+  { id: "b1", columns: [
+    { id: "c1", cards: [{ id: "k1", title: "..." }] }
+  ]}
+]);
+
+// Good: 정규화 — id로 접근, 업데이트 쉬움
+const [boards, setBoards] = useState({ b1: { id: "b1", columnIds: ["c1"] } });
+const [columns, setColumns] = useState({ c1: { id: "c1", cardIds: ["k1"] } });
+const [cards, setCards] = useState({ k1: { id: "k1", title: "..." } });
+// 특정 카드만 업데이트: setCards(prev => ({ ...prev, k1: { ...prev.k1, title: "new" } }))
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 칸반 보드에서 카드를 드래그할 때마다 전체 보드 state를 깊은 복사해서 업데이트하니 렌더링이 느려짐. 보드/컬럼/카드를 정규화된 구조로 분리하니 카드 하나만 업데이트할 때 다른 컬럼은 참조가 유지되어 `React.memo`가 효과를 발휘.
+
 ### 자주 하는 오해
 
-- 상태를 한 객체에 모으면 관리가 쉽다 → 규모가 커지면 반대가 되기 쉽다
-- 파생값도 전부 state로 둬야 한다 → 계산으로 충분할 수 있다. `useState` + `useEffect`로 동기화하면 오히려 버그 원인이 된다.
-- 드래그 중 좌표도 전역으로 두는 게 낫다 → 일시 상태는 더 좁은 범위가 적절하다
+- 상태를 한 객체에 모으면 관리가 쉽다 → **규모가 커지면 반대.**
+- 파생값도 전부 state로 둬야 한다 → **계산으로 충분. useState + useEffect 동기화는 안티패턴.**
+- 드래그 좌표도 전역이 낫다 → **일시 상태는 가장 좁은 범위가 적절.**
 
 ### 면접 압축 답변
 
-- **10초**: 복잡한 UI에서는 상태를 영속/일시/파생/서버로 나눠 역할별로 관리합니다.
-- **30초**: 저장 대상은 서버 상태 도구로, hover/drag 같은 순간 상태는 로컬로, 기존 상태에서 계산 가능한 값은 `useMemo`나 일반 변수로 처리합니다. 파생 상태를 `useState` + `useEffect`로 동기화하는 건 흔한 안티패턴입니다.
+- **10초**: 복잡한 UI에서는 상태를 영속/일시/파생/서버로 나눠 역할별로 관리합니다. 파생 상태를 state로 만드는 건 안티패턴입니다.
+- **30초**: 저장 대상은 서버 상태 도구, hover/drag 같은 순간 상태는 로컬, 계산 가능한 값은 `useMemo`나 일반 변수로 처리합니다. 중첩 데이터 구조는 정규화하면 특정 아이템만 업데이트할 때 나머지 참조가 유지되어 메모이제이션이 효과를 발휘합니다.
 
 ---
 
-## 67. 이 챕터를 읽고 나면 무엇이 연결되어야 하나
+# 다음 챕터로의 연결
 
-이 챕터를 다 읽고 나면 아래 흐름이 한 덩어리로 보여야 한다.
+이 챕터에서 다룬 것을 한 줄로 요약하면:
 
-- React는 선언형 UI 시스템이다
-- 상태가 바뀌면 UI를 다시 계산한다 (렌더 → 커밋)
-- Fiber 기반 Virtual DOM으로 변경을 최소화한다
-- 재조정은 타입과 key로 정체성을 판단한다
-- state ownership이 구조 설계의 핵심이다
-- Context는 값 전달, Zustand/Redux는 구독 제어 — 축이 다르다
-- client state와 server state는 구분해야 한다
-- useReducer는 복잡한 상태 전환을 한 곳에 모아 관리한다
-- React 18 concurrent features로 렌더링 우선순위를 제어한다
-- 에러 바운더리로 실패를 격리한다
-- 복잡한 UI일수록 상태를 역할별로 나누는 감각이 필요하다
+> **"React는 상태와 UI의 관계를 어떻게 계산하고, 그 위에 어떤 구조를 세워야 하는가"**
 
-이번 챕터는 단순히 React API를 배우는 챕터가 아니라,
-**"React는 상태와 UI의 관계를 어떻게 계산하고, 그 위에 어떤 구조를 세워야 하는가"**를 배우는 챕터다.
+```
+선언형 모델(UI = f(state)) 위에서
+  → 렌더/커밋이 분리되고
+  → Fiber가 우선순위를 제어하고
+  → state ownership이 구조를 결정하고
+  → Context/Zustand/React Query가 각자의 역할을 나누고
+  → 에러 바운더리가 실패를 격리한다
+```
 
----
+다음 챕터(챕터 6)에서는 **Next.js와 렌더링 전략**으로 넘어간다.
 
-### 다음 챕터로 이어질 질문들
-
-1. Next.js는 React 위에서 어떤 문제를 더 풀어주나?
-2. SSR, SSG, ISR, CSR은 각각 어떤 렌더링 전략인가?
-3. Server Component와 Client Component는 왜 나뉘는가?
-4. `use client`는 어떤 비용을 뜻하나?
-5. URL 상태와 서버 데이터 패칭 전략은 어떻게 설계해야 하나?
+- Next.js는 React 위에서 어떤 문제를 더 풀어주나?
+- SSR, SSG, ISR, CSR은 각각 어떤 렌더링 전략인가?
+- Server Component와 Client Component는 왜 나뉘는가?
+- `use client`는 어떤 비용을 뜻하나?
+- URL 상태와 서버 데이터 패칭 전략은 어떻게 설계해야 하나?

@@ -2,7 +2,7 @@
 title: "Next.js 렌더링 전략에서 서버 경계 설계까지"
 chapter: "06"
 summary: "Next.js의 렌더링 전략(SSR, SSG, ISR), Server/Client Component, 데이터 페칭과 서버 경계 설계를 이해하는 챕터입니다."
-estimatedReadMinutes: 45
+estimatedReadMinutes: 55
 learningGoals:
   - "Next.js가 React 위에서 해결하는 문제와 렌더링 전략을 구분한다"
   - "Server Component와 Client Component의 역할과 경계를 설명한다"
@@ -15,89 +15,46 @@ learningGoals:
 
 > **Next.js는 React 위에 서버 렌더링, 라우팅, 데이터 페칭, 캐싱, 서버 경계를 얹어서 "언제 무엇을 어디서 렌더할 것인가"를 설계하게 만드는 프레임워크라는 관점으로 이해해야 한다.**
 
+### 전체 흐름 맵
+
+```
+Next.js가 React 위에서 푸는 문제
+  → App Router (파일 시스템 라우팅 + 중첩 레이아웃)
+    → 렌더링 전략 (SSR / SSG / ISR / CSR / Streaming)
+      → Server Component / Client Component (실행 환경 분리)
+        → 'use client' (번들 경계 선언)
+          → Server Actions (서버 mutation)
+            → 데이터 페칭 위치 (서버 vs 클라이언트)
+              → 캐싱과 재검증 (신선도 설계)
+                → Route Handlers / BFF (서버 엔드포인트)
+                  → URL 상태 설계 (탐색 가능한 상태)
+                    → Middleware (요청 초반 분기)
+```
+
 ---
 
 ## 66. Next.js는 React 위에서 어떤 문제를 더 풀어주나
 
-앞 챕터에서 React의 선언형 렌더링 모델과 상태 구조를 봤다면,
-이제 자연스럽게 이런 질문이 나온다.
+> **TL;DR** — Next.js는 React를 대체하는 게 아니라, 라우팅, 서버 렌더링, 데이터 페칭, 캐싱, 서버 경계까지 포함한 애플리케이션 구조로 확장한다.
 
-> **그런데 React만으로 앱을 만들면 서버 렌더링, 라우팅, 데이터 페칭, 배포 친화적 구조는 어떻게 다뤄야 할까?**
-
-여기서 Next.js가 등장한다.
-
-### 핵심 개념
-
-Next.js는 React 자체를 대체하는 게 아니라,
-React 앱을 **라우팅, 렌더링 전략, 서버 실행, 데이터 페칭, 캐싱**까지 포함한 애플리케이션 구조로 확장해준다.
-
-공식 App Router 문맥에서 특히 중요한 축은 아래와 같다.
-
-- 파일 시스템 기반 라우팅
-- 레이아웃과 중첩 UI 구조
-- Server Components / Client Components
-- 서버 중심 데이터 페칭
-- 캐싱과 재검증
-- Route Handlers 같은 서버 엔드포인트 구조
-
-### 왜 이게 중요한가
-
-React만으로도 화면은 만들 수 있다.
-하지만 실제 서비스에선 아래 질문이 계속 생긴다.
+### React만으로는 답하기 어려운 질문들
 
 - 첫 화면을 더 빨리 보여주려면?
 - SEO가 필요한 페이지는?
 - 서버에서 비밀값을 써야 하는 로직은?
-- 데이터를 어디서 가져오는 게 자연스러운가?
 - 어떤 페이지는 미리 만들고, 어떤 페이지는 요청마다 만들까?
 - 클라이언트 번들을 어떻게 줄일까?
 
 Next.js는 이런 질문에 대한 선택지를 제공한다.
 
-### 자주 하는 오해
-
-- Next.js는 React보다 상위라서 React를 몰라도 된다 → 틀림
-- Next.js를 쓰면 성능 문제가 자동으로 해결된다 → 틀림
-- Next.js는 SSR 프레임워크다 → 너무 좁은 설명이다
-- Next.js는 프론트 전용이다 → 서버 경계와 서버 실행 문맥도 포함된다
-
-### 실무 연결
-
-프론트엔드 면접에서 Next.js를 잘 설명한다는 건
-"라우팅 라이브러리 이름을 안다"가 아니라,
-**어떤 UI를 서버에 두고 어떤 인터랙션을 클라이언트로 내릴지 판단할 수 있다**는 뜻에 가깝다.
-
-> 이제 Next.js가 React 위에서 푸는 문제를 봤다. 그다음엔 현재 공식 문서 기준의 중심 구조인 **App Router**로 넘어간다.
-
-### 면접 압축 답변
-
-Next.js는 React 위에 라우팅, 서버 렌더링, 데이터 페칭, 캐싱, 서버 경계 같은 애플리케이션 구조를 얹어주는 프레임워크입니다. 그래서 단순 화면 구성보다 "언제 무엇을 어디서 렌더하고, 어디서 데이터를 가져올지"를 설계하게 만든다는 점이 핵심입니다.
-
----
-
-## 67. App Router는 왜 Next.js의 현재 중심 구조인가
-
-현재 공식 문서 기준으로 Next.js는 App Router를 중심으로 학습 흐름을 잡고 있다.
-이 구조는 React의 최신 기능들(Server Components, Suspense 등)을 더 직접적으로 활용할 수 있게 설계되어 있다.
-
-### 핵심 개념
-
-App Router는 파일 시스템 기반 라우터이면서,
-아래 기능들과 강하게 연결된다.
-
-- `layout.tsx` — 중첩 레이아웃 정의
-- `page.tsx` — 해당 세그먼트의 UI
-- `loading.tsx` — Suspense 기반 로딩 상태
-- `error.tsx` — Error Boundary 기반 에러 처리
-- `route.ts` — 서버 엔드포인트 (Route Handler)
-- Server Components (기본값)
-- Client Components (`'use client'` 선언)
+### App Router — 현재 공식 중심 구조
 
 ```
 app/
 ├── layout.tsx          ← 루트 레이아웃
 ├── page.tsx            ← / 경로
-├── loading.tsx         ← 루트 로딩 상태
+├── loading.tsx         ← Suspense 기반 로딩 상태
+├── error.tsx           ← Error Boundary 기반 에러 처리
 ├── dashboard/
 │   ├── layout.tsx      ← 대시보드 중첩 레이아웃
 │   ├── page.tsx        ← /dashboard 경로
@@ -108,278 +65,155 @@ app/
         └── route.ts    ← /api/users 엔드포인트
 ```
 
-### 왜 이게 중요한가
+| 파일 | 역할 |
+|---|---|
+| `layout.tsx` | 중첩 레이아웃 — 하위 세그먼트와 공유 |
+| `page.tsx` | 해당 경로의 UI |
+| `loading.tsx` | Suspense fallback — 로딩 상태 |
+| `error.tsx` | Error Boundary — 에러 격리 |
+| `route.ts` | Route Handler — 서버 엔드포인트 |
 
-이전에는 페이지 단위 중심 사고가 강했다면,
-App Router에선 **중첩 레이아웃과 서버/클라이언트 경계**가 훨씬 중요해진다.
+App Router의 핵심은 단순 페이지 라우팅이 아니라 **중첩 레이아웃 + 서버/클라이언트 경계 + Suspense 통합**이다.
 
-즉 단순히 "URL이 무엇을 가리키는가"를 넘어서,
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- 이 세그먼트는 어떤 layout을 공유하는가
-- 어느 부분은 서버에서 준비되는가
-- 어느 부분은 클라이언트 인터랙션이 필요한가
-- 어떤 경계에서 로딩과 에러를 나눌 것인가
-
-까지 같이 보게 된다.
+> CRA(Create React App)로 만든 SPA를 운영하다가 SEO가 필요한 마케팅 페이지를 추가해야 했는데, CSR만으로는 검색엔진 노출이 안 됐다. Next.js로 마이그레이션하면서 마케팅 페이지는 SSG, 대시보드는 CSR, 상품 상세는 ISR로 페이지별 렌더링 전략을 다르게 가져갈 수 있게 됨.
 
 ### 자주 하는 오해
 
-- App Router는 Pages Router를 완전히 모르면 이해할 수 없다 → 꼭 그렇진 않다. App Router부터 시작해도 된다
-- App Router는 폴더 이름만 바뀐 구조다 → 틀림. Server Components 기본값, 중첩 레이아웃, Suspense 통합 등 설계 철학 자체가 다르다
-- App Router에선 서버와 클라이언트를 별로 고민 안 해도 된다 → 오히려 더 중요하다
-
-### 실무 연결
-
-App Router 감각이 있으면
-"이 페이지는 SSR인가?" 수준을 넘어서
-
-- layout 분리
-- server/client boundary
-- segment 기반 로딩
-- 데이터 페칭 위치
-- 캐싱 전략
-
-까지 하나의 구조로 볼 수 있다.
-
-> 이제 App Router 구조를 알았다. 그다음엔 가장 자주 나오는 렌더링 전략 질문, 즉 **SSR / SSG / ISR / CSR**로 넘어간다.
+- Next.js는 React보다 상위라서 React를 몰라도 된다 → **틀림.** React 위에 얹어진 것이다.
+- Next.js는 SSR 프레임워크다 → **너무 좁은 설명.** 서버 경계, 캐싱, 라우팅까지 포함.
+- Next.js를 쓰면 성능이 자동으로 좋아진다 → **틀림.** 설계에 따라 다르다.
 
 ### 면접 압축 답변
 
-App Router는 현재 공식 문서 기준의 중심 구조로, 파일 시스템 라우팅에 레이아웃, Server/Client Components, Suspense 기반 분할 렌더링 같은 개념을 강하게 결합합니다. 그래서 단순 페이지 라우팅보다 서버 경계와 중첩 UI 구조를 함께 설계하게 만든다는 점이 중요합니다.
+- **10초**: Next.js는 React 위에 라우팅, 서버 렌더링, 데이터 페칭, 캐싱을 얹어 "언제 무엇을 어디서 렌더할지" 설계하게 만드는 프레임워크입니다.
+- **30초**: App Router는 파일 시스템 라우팅에 중첩 레이아웃, Server/Client Components, Suspense 기반 로딩/에러 처리를 통합합니다. 단순 페이지 라우팅을 넘어 서버 경계와 렌더링 전략을 함께 설계하게 됩니다.
 
 ---
 
-## 68. SSR, SSG, ISR, CSR은 각각 어떤 문제를 푸는가
+## 67. SSR, SSG, ISR, CSR, Streaming은 각각 어떤 문제를 푸는가
 
-Next.js 면접에서 가장 자주 나오는 주제 중 하나다.
-그런데 이걸 "정의 암기"로만 외우면 실제 설계 판단으로 이어지지 않는다.
+> **TL;DR** — 정의 암기가 아니라 "데이터 신선도, SEO, 초기 로드, 인터랙션 요구"에 따라 어떤 조합이 적절한지 판단하는 게 핵심. 한 앱 안에서도 페이지별로 전략이 다르다.
 
-### 핵심 개념
+### 렌더링 전략 비교
 
-#### SSR (Server-Side Rendering)
+| 전략 | 렌더 시점 | 데이터 신선도 | TTFB | SEO | 대표 용례 |
+|---|---|---|---|---|---|
+| **SSG** | 빌드 시 | 빌드 시점 고정 | 매우 빠름 (CDN) | 좋음 | 마케팅, 문서, 블로그 |
+| **ISR** | 빌드 시 + 주기적 재생성 | 설정 주기만큼 | 빠름 (캐시) | 좋음 | 상품 상세, 뉴스 |
+| **SSR** | 요청 시 | 항상 최신 | 서버 응답 시간 | 좋음 | 대시보드, 검색 결과 |
+| **CSR** | 브라우저에서 | 클라이언트 요청 시 | HTML 빠름, 콘텐츠 느림 | 약함 | 로그인 후 개인화 UI |
+| **Streaming** | 요청 시 (점진적) | 부분별 최신 | 점진적 | 좋음 | 복합 페이지 (일부 빠르게, 일부 나중에) |
 
-요청 시점에 서버에서 HTML을 생성해 응답하는 방식.
-매 요청마다 최신 데이터를 반영할 수 있지만, 서버 응답 시간이 곧 TTFB(Time To First Byte)에 영향을 준다.
+### Streaming SSR — App Router의 강력한 기능
+
+기존 SSR은 모든 데이터가 준비될 때까지 HTML 전체를 보류했다. Streaming은 **준비된 부분부터 점진적으로 전송**한다.
 
 ```tsx
-// app/products/[id]/page.tsx
-// dynamic = 'force-dynamic'으로 매 요청마다 서버에서 실행
-export const dynamic = "force-dynamic";
+// app/dashboard/page.tsx
+import { Suspense } from "react";
 
-export default async function ProductPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const product = await fetch(`https://api.example.com/products/${params.id}`, {
-    cache: "no-store", // 캐시 없이 매번 요청
-  }).then((res) => res.json());
-
+export default function Dashboard() {
   return (
     <div>
-      <h1>{product.name}</h1>
-      <p>재고: {product.stock}개</p>
+      <h1>대시보드</h1>
+      {/* 헤더는 즉시 전송 */}
+
+      <Suspense fallback={<p>매출 데이터 로딩...</p>}>
+        <SalesChart />  {/* 느린 API — 나중에 스트리밍 */}
+      </Suspense>
+
+      <Suspense fallback={<p>알림 로딩...</p>}>
+        <NotificationList />  {/* 또 다른 느린 API — 독립적으로 스트리밍 */}
+      </Suspense>
     </div>
   );
 }
 ```
 
-#### SSG (Static Site Generation)
+```
+기존 SSR:  [전체 데이터 준비] ──────────────── [HTML 전송]
+                                                 ↑ 사용자가 여기서야 뭔가 봄
 
-빌드 시점에 HTML을 미리 생성해 두는 방식.
-CDN에서 즉시 제공할 수 있어 가장 빠르지만, 빌드 후 데이터가 바뀌면 반영이 안 된다.
-
-```tsx
-// app/blog/[slug]/page.tsx
-// generateStaticParams로 빌드 시 미리 경로 생성
-export async function generateStaticParams() {
-  const posts = await getAllPosts();
-  return posts.map((post) => ({ slug: post.slug }));
-}
-
-export default async function BlogPost({
-  params,
-}: {
-  params: { slug: string };
-}) {
-  const post = await getPost(params.slug);
-  return (
-    <article>
-      <h1>{post.title}</h1>
-      <div>{post.content}</div>
-    </article>
-  );
-}
+Streaming: [헤더 준비] → [헤더 전송] → [차트 준비] → [차트 스트리밍] → [알림 스트리밍]
+            ↑ 사용자가 여기서 이미 헤더를 봄
 ```
 
-#### ISR (Incremental Static Regeneration)
+### 선택 가이드
 
-정적 생성 기반이지만, 일정 시간 후 백그라운드에서 재생성하는 방식.
-`revalidate` 값으로 캐시 유지 시간을 지정하거나, `revalidateTag`/`revalidatePath`로 수동 무효화할 수 있다.
-
-```tsx
-// app/news/page.tsx
-// 60초마다 백그라운드에서 재생성
-export const revalidate = 60;
-
-export default async function NewsPage() {
-  const articles = await fetch("https://api.example.com/news").then((res) =>
-    res.json()
-  );
-
-  return (
-    <ul>
-      {articles.map((a: any) => (
-        <li key={a.id}>{a.title}</li>
-      ))}
-    </ul>
-  );
-}
+```
+이 페이지의 데이터는...
+│
+├── 빌드 시 확정? → SSG (마케팅, 문서)
+│     └── 가끔 바뀜? → ISR (revalidate 설정)
+│
+├── 요청마다 최신이어야 함? → SSR
+│     └── 일부는 빠르고 일부는 느림? → Streaming + Suspense
+│
+└── 서버 렌더링 불필요, 인터랙션 중심? → CSR (use client)
 ```
 
-#### CSR (Client-Side Rendering)
+### 실무 에피소드 — 이런 상황에서 만난다
 
-서버에서 최소한의 HTML만 보내고, 클라이언트 자바스크립트가 화면을 구성하는 방식.
-초기 로드 속도와 SEO에서 불리하지만, 로그인 후 인터랙션 중심 UI에는 자연스럽다.
-
-```tsx
-"use client";
-
-import { useEffect, useState } from "react";
-
-export default function UserDashboard() {
-  const [data, setData] = useState(null);
-
-  useEffect(() => {
-    fetch("/api/my-dashboard")
-      .then((res) => res.json())
-      .then(setData);
-  }, []);
-
-  if (!data) return <p>로딩 중...</p>;
-  return <div>{/* 대시보드 UI */}</div>;
-}
-```
-
-### 왜 이게 중요한가
-
-이 질문의 핵심은 정의가 아니라 **선택 기준**이다.
-
-| 전략 | 렌더 시점 | 데이터 신선도 | 대표 용례 |
-| --- | --- | --- | --- |
-| SSG | 빌드 시 | 빌드 시점 고정 | 마케팅 페이지, 문서 |
-| ISR | 빌드 시 + 주기적 재생성 | 설정된 주기만큼 | 블로그, 상품 상세 |
-| SSR | 요청 시 | 항상 최신 | 대시보드, 검색 결과 |
-| CSR | 브라우저에서 | 클라이언트 요청 시 | 로그인 후 개인화 UI |
+> 이커머스에서 상품 상세 페이지를 SSR로 했더니 매 요청마다 서버 응답이 500ms 걸려서 체감 느림. ISR로 바꾸고 `revalidate: 300`(5분)으로 설정하니 대부분 요청이 캐시에서 즉시 응답. 재고 같은 실시간 데이터는 클라이언트에서 별도 fetch.
 
 ### 자주 하는 오해
 
-- SSR이 항상 더 빠르다 → 상황에 따라 다르다. 서버 응답이 느리면 SSG보다 훨씬 느릴 수 있다
-- CSR은 SEO가 안 된다 → 검색 엔진 크롤러가 JavaScript를 실행할 수 있는 경우도 있지만, 안정적인 SEO를 원한다면 서버 렌더링 쪽이 유리하다
-- ISR은 그냥 SSG의 옵션이다 → 캐시와 재검증 설계 감각이 함께 필요하다
-- 한 앱은 한 방식만 써야 한다 → 보통은 섞인다. 한 앱 안에서 페이지별로 다른 전략을 적용하는 게 일반적이다
-
-### 실무 연결
-
-좋은 답변은 이런 식이다.
-
-- 공개 마케팅 페이지 → 정적/캐시 친화적 (SSG)
-- 자주 바뀌는 대시보드 데이터 → 런타임 데이터 중심 (SSR)
-- 블로그/상품 상세 → 정적 + 재검증 전략 가능 (ISR)
-- 로그인 이후 인터랙션 영역 → 클라이언트 컴포넌트와 클라이언트 상태 활용 (CSR)
-
-> 이제 렌더링 전략 이름은 봤다. 그다음엔 App Router 기준에서 더 본질적인 질문이 나온다. **그럼 이 렌더링 전략은 결국 Server Component와 Client Component 구분과 어떻게 연결되는가?**
+- SSR이 항상 더 빠르다 → **서버 응답이 느리면 SSG보다 훨씬 느릴 수 있다.**
+- 한 앱은 한 방식만 써야 한다 → **페이지별로 다른 전략을 적용하는 게 일반적이다.**
+- CSR은 SEO가 안 된다 → **검색 엔진에 따라 다르지만, 안정적 SEO를 원하면 서버 렌더링이 유리.**
 
 ### 면접 압축 답변
 
-SSR, SSG, ISR, CSR은 각각 렌더링 시점과 캐시 전략이 다른 방식입니다. 중요한 건 정의 암기보다, 데이터 신선도, SEO, 초기 로드 속도, 인터랙션 요구사항에 따라 어떤 조합이 더 적절한지 판단하는 것입니다. 한 앱 안에서도 페이지별로 전략을 다르게 가져가는 게 일반적입니다.
+- **10초**: SSG(빌드 시), ISR(빌드 + 주기적 재생성), SSR(요청 시), CSR(브라우저), Streaming(점진적 전송)은 각각 렌더링 시점과 캐시 전략이 다릅니다.
+- **30초**: 데이터 신선도, SEO, 초기 로드 속도, 인터랙션 요구에 따라 전략을 다르게 가져갑니다. Streaming은 Suspense와 결합해서 준비된 부분부터 점진적으로 보여줘서, 전체 데이터가 준비될 때까지 기다리는 기존 SSR의 한계를 보완합니다.
 
 ---
 
-## 69. Server Component와 Client Component는 왜 나뉘는가
+## 68. Server Component와 Client Component
 
-App Router에서 가장 중요한 개념 축 중 하나다.
-공식 문서 기준으로 `page`와 `layout`은 기본적으로 Server Component이며,
-상태, 이벤트 핸들러, 브라우저 API가 필요할 때 Client Component를 사용한다.
+> **TL;DR** — Server Component는 서버에서 실행되어 번들에 포함 안 됨. Client Component는 상태/이벤트/브라우저 API가 필요할 때. Client Component도 서버에서 프리렌더된 뒤 hydration됨.
 
-### 핵심 개념
+### 비교 테이블
 
-#### Server Component가 잘 맞는 일
+| | Server Component (기본값) | Client Component (`'use client'`) |
+|---|---|---|
+| **실행 위치** | 서버 | 서버(프리렌더) + 클라이언트(hydration) |
+| **번들 포함** | 안 됨 | 포함됨 |
+| **async/await** | 직접 사용 가능 | 불가 (hooks로 대체) |
+| **useState/useEffect** | 사용 불가 | 사용 가능 |
+| **이벤트 핸들러** | 사용 불가 | 사용 가능 |
+| **브라우저 API** | 접근 불가 | 접근 가능 |
+| **DB/ORM 직접 접근** | 가능 | 불가 |
+| **비밀값(API key 등)** | 안전 | 노출 위험 |
 
-- 데이터 소스 가까이서 fetch (DB 직접 접근, ORM 호출 등)
-- 비밀값, 토큰, 서버 전용 자원 사용
-- 클라이언트 자바스크립트 번들 줄이기 (Server Component의 코드는 클라이언트 번들에 포함되지 않는다)
-- 초기 HTML을 더 빠르게 준비하기
-
-#### Client Component가 잘 맞는 일
-
-- `useState`, `useReducer` 등 상태 관리
-- `onClick`, `onChange` 등 이벤트 핸들러
-- `useEffect` 등 라이프사이클
-- `window`, `localStorage` 등 브라우저 API 사용
-- 사용자 인터랙션 전반
-
-중요한 점은, Client Component라고 해서 서버에서 전혀 실행되지 않는 것이 아니다.
-App Router에서 Client Component도 **서버에서 초기 HTML로 프리렌더**된 뒤, 클라이언트에서 hydration을 거쳐 인터랙티브해진다.
-
-### 왜 이게 중요한가
-
-이 구분이 없으면
-모든 걸 클라이언트로 보내서 번들이 커지거나,
-반대로 인터랙션이 필요한데 서버 쪽에 두려는 이상한 구조가 된다.
-
-즉 Next.js 설계 핵심은 보통 이 질문이다.
+### 핵심 설계 질문
 
 > **이 로직은 서버에 두는 게 자연스러운가, 클라이언트에 두는 게 자연스러운가?**
 
-### 자주 하는 오해
-
-- Server Component는 서버에서만 보이고 클라이언트엔 아예 전달되지 않는다 → 렌더 결과(HTML과 RSC Payload)는 클라이언트에 전달된다. 다만 컴포넌트 코드 자체는 클라이언트 번들에 포함되지 않는다
-- Client Component는 전부 CSR이다 → 틀림. App Router 안에서 Client Component도 서버에서 HTML로 프리렌더된다
-- Client Component를 쓰면 무조건 나쁘다 → 인터랙션엔 필요하다
-- Server Component가 항상 정답이다 → 브라우저 이벤트와 상태는 클라이언트가 필요하다
-- Server Component 안에서 Client Component를 children으로 넘기면 그것도 서버가 된다 → 틀림. Client Component는 `'use client'` 선언에 의해 결정되며, children으로 전달되더라도 클라이언트에서 실행된다
-
-### 실무 연결
-
-좋은 설계는 보통:
-
-- 데이터 조회와 정적 UI는 서버 쪽
-- 버튼, 입력, 모달, 드롭다운 같은 인터랙션은 클라이언트 쪽
-
-으로 나눈다. 이때 Server Component가 Client Component를 **children props로 감싸는 패턴**이 자주 쓰인다.
-
 ```tsx
-// app/posts/[id]/page.tsx (Server Component)
-import CommentSection from "./comment-section";
-
-export default async function PostPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const post = await getPost(params.id);
+// Server Component — 데이터 조회 + 정적 UI
+// app/posts/[id]/page.tsx
+export default async function PostPage({ params }) {
+  const post = await getPost(params.id); // 서버에서 직접 DB 접근
 
   return (
     <article>
       <h1>{post.title}</h1>
       <p>{post.body}</p>
-      {/* 인터랙션이 필요한 부분만 Client Component */}
-      <CommentSection postId={params.id} />
+      <CommentSection postId={params.id} /> {/* 인터랙션만 Client */}
     </article>
   );
 }
-```
 
-```tsx
-// app/posts/[id]/comment-section.tsx (Client Component)
+// Client Component — 상태 + 이벤트
+// app/posts/[id]/comment-section.tsx
 "use client";
-
 import { useState } from "react";
 
-export default function CommentSection({ postId }: { postId: string }) {
+export default function CommentSection({ postId }) {
   const [text, setText] = useState("");
-
   return (
     <div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} />
@@ -389,379 +223,257 @@ export default function CommentSection({ postId }: { postId: string }) {
 }
 ```
 
-> 이제 서버/클라이언트 구분을 알았다. 그다음엔 이를 실제 파일에서 선언하는 대표 경계인 **`'use client'`** 로 넘어간다.
+### Serialization 제약 — SC에서 CC로 넘길 수 있는 것
 
-### 면접 압축 답변
+Server Component에서 Client Component로 props를 넘길 때, **직렬화 가능한 값만** 전달할 수 있다.
 
-App Router에서 Server Component와 Client Component를 나누는 이유는, 데이터 페칭과 비밀값 처리, 번들 절감은 서버에 두고, state와 이벤트 핸들러, 브라우저 API가 필요한 부분만 클라이언트로 보내기 위해서입니다. 핵심은 기술 선택이 아니라 실행 환경 분리이며, Client Component도 서버에서 프리렌더된 뒤 클라이언트에서 hydration된다는 점을 함께 이해해야 합니다.
+| 전달 가능 | 전달 불가 |
+|---|---|
+| string, number, boolean, null | 함수 (onClick 등) |
+| 배열, 일반 객체 | 클래스 인스턴스 |
+| Date (문자열로 변환) | Map, Set |
+| JSX (children으로) | Symbol |
 
----
+```tsx
+// OK: 직렬화 가능한 값
+<ClientChild data={post} count={42} />
 
-## 70. 'use client'는 정확히 무엇을 의미하나
+// NG: 함수는 전달 불가
+<ClientChild onClick={() => console.log("hi")} />
+// → 함수는 Client Component 안에서 정의해야 함
+```
 
-많은 사람이 `'use client'`를 "이 파일은 클라이언트에서 돈다" 정도로만 이해한다.
-그런데 공식 문서 기준으로 더 정확한 표현은 **클라이언트 진입 경계(entry point)** 를 선언하는 것이다.
+### 'use client'는 번들 경계
 
-### 핵심 개념
+`'use client'`는 단순 "이 파일은 클라이언트"가 아니라 **모듈 그래프 상의 번들 경계**다.
 
-`'use client'`는 파일 최상단에서
-해당 컴포넌트를 **Server Components 트리 안에서 클라이언트 경계로 끌어올리는 선언**이다.
+```
+Server Component 트리
+    │
+    ├── layout.tsx (SC)
+    ├── page.tsx (SC)
+    │     └── getPost() — 서버에서만 실행, 번들에 안 들어감
+    │
+    └── 'use client' ← 여기가 경계
+          │
+          ├── comment-section.tsx (CC) — 번들에 포함
+          └── 이 파일이 import하는 모든 모듈도 번들에 포함!
+```
 
-그리고 중요한 점은:
+**실무 원칙**: `'use client'`는 가능한 작은 leaf 컴포넌트에만 붙이고, 상위 layout/page는 서버에 남긴다.
 
-- 그 파일만 클라이언트가 되는 게 아니라
-- 그 파일이 import하는 모든 모듈도 클라이언트 번들에 포함된다
+### 실무 에피소드 — 이런 상황에서 만난다
 
-즉 `'use client'`는 모듈 그래프 상에서 "여기서부터 아래로는 클라이언트 번들"이라는 경계선이다.
-
-### 왜 이게 중요한가
-
-이걸 모르고 `'use client'`를 상위 큰 파일에 붙이면,
-원래 서버에 둘 수 있었던 것들까지 클라이언트 번들에 포함될 수 있다.
-
-즉 `'use client'`는 단순 문법이 아니라,
-**번들 경계와 실행 환경 경계**를 자르는 선언이다.
+> 페이지 전체에 `'use client'`를 붙여서 서버 전용 DB 접근이 안 되고, 모든 코드가 클라이언트 번들에 포함되면서 번들 크기가 2배가 된 사례. `'use client'`를 좋아요 버튼, 댓글 입력 같은 인터랙션 leaf에만 붙이고, 페이지와 레이아웃은 서버에 남기니 번들이 절반으로 줄어듦.
 
 ### 자주 하는 오해
 
-- 인터랙션 있는 컴포넌트마다 전부 붙여야 한다 → 꼭 그렇진 않다. 상위에 하나 붙이면 하위는 자동으로 클라이언트다
-- `'use client'`를 붙이면 그 파일만 영향 받는다 → 하위 import 구조도 함께 클라이언트 번들에 포함된다
-- `'use client'`는 성능 최적화와 상관없다 → 클라이언트 번들 크기와 직접 연결된다
-- `'use client'`를 붙이면 서버에서 전혀 실행되지 않는다 → 틀림. 프리렌더 시 서버에서도 실행되어 초기 HTML을 만든다
+- Client Component는 전부 CSR이다 → **틀림.** 서버에서 HTML로 프리렌더된 뒤 hydration.
+- Server Component 안에 Client Component를 children으로 넘기면 서버가 된다 → **틀림.** `'use client'` 선언으로 결정.
+- `'use client'`를 붙이면 그 파일만 영향 → **하위 import 전체가 클라이언트 번들에 포함.**
 
-### 실무 연결
+### 면접 압축 답변
 
-그래서 실무에서는 보통:
+- **10초**: Server Component는 서버에서 실행되어 번들에 포함 안 되고, Client Component는 상태/이벤트가 필요할 때 씁니다. `'use client'`는 모듈 그래프의 번들 경계입니다.
+- **30초**: Server Component에서는 async/await로 직접 데이터를 가져오고 비밀값을 안전하게 쓸 수 있습니다. Client Component도 서버에서 프리렌더된 뒤 hydration됩니다. SC에서 CC로는 직렬화 가능한 값만 전달 가능하고, `'use client'`는 가능한 leaf 쪽에만 붙여야 번들 비용을 줄일 수 있습니다.
 
-- 최대한 작은 인터랙션 leaf 쪽에만 `'use client'`를 두고
-- 상위 layout/page는 가능한 서버에 남기는 구조를 선호한다
+---
 
-### 예시
+## 69. Server Actions — 서버 mutation의 새로운 방식
+
+> **TL;DR** — Server Actions는 클라이언트에서 호출하면 서버에서 실행되는 함수다. Route Handler 없이 폼 제출, 데이터 mutation을 처리할 수 있고, `revalidatePath`/`revalidateTag`로 캐시 무효화까지 한 흐름으로 가능하다.
+
+### 핵심 개념
 
 ```tsx
-// app/posts/[id]/page.tsx (Server Component — 'use client' 없음)
-import LikeButton from "./like-button";
+// app/actions.ts
+"use server";
 
-export default async function Page() {
-  const post = await getPost();
+import { revalidatePath } from "next/cache";
 
+export async function createPost(formData: FormData) {
+  const title = formData.get("title") as string;
+  const body = formData.get("body") as string;
+
+  await db.posts.create({ title, body });
+
+  revalidatePath("/posts"); // 캐시 무효화 → 목록 갱신
+}
+```
+
+```tsx
+// app/posts/new/page.tsx (Server Component에서 직접 사용)
+import { createPost } from "../actions";
+
+export default function NewPostPage() {
   return (
-    <article>
-      <h1>{post.title}</h1>
-      <LikeButton likes={post.likes} />
-    </article>
+    <form action={createPost}>
+      <input name="title" placeholder="제목" />
+      <textarea name="body" placeholder="본문" />
+      <button type="submit">작성</button>
+    </form>
   );
 }
 ```
 
 ```tsx
-// app/posts/[id]/like-button.tsx (Client Component)
+// Client Component에서도 사용 가능
 "use client";
 
-import { useState } from "react";
+import { createPost } from "../actions";
+import { useTransition } from "react";
 
-export default function LikeButton({ likes }: { likes: number }) {
-  const [count, setCount] = useState(likes);
+export default function NewPostForm() {
+  const [isPending, startTransition] = useTransition();
 
-  return <button onClick={() => setCount((prev) => prev + 1)}>{count}</button>;
-}
-```
-
-이 구조에서 `page.tsx`는 서버에서 실행되고, `like-button.tsx`만 클라이언트 번들에 포함된다.
-만약 `page.tsx`에 `'use client'`를 붙였다면 `getPost()` 같은 서버 전용 호출도 클라이언트로 가야 하는 문제가 생긴다.
-
-> 이제 `'use client'`가 경계라는 걸 봤다. 그다음엔 자연스럽게 **클라이언트로 내리면 어떤 비용이 생기나**를 본다.
-
-### 면접 압축 답변
-
-`'use client'`는 단순히 "이 파일은 브라우저에서 실행된다"는 표시가 아니라, Server Components 트리 안에서 클라이언트 진입 경계를 선언하는 역할을 합니다. 이 선언 아래의 모든 import가 클라이언트 번들에 포함되기 때문에, 상위 큰 파일에 무심코 붙이면 번들이 불필요하게 커질 수 있어 경계를 작게 잡는 감각이 중요합니다.
-
----
-
-## 71. 'use client'의 비용은 무엇인가
-
-앞 질문에서 `'use client'`는 단순 문법이 아니라 경계라고 했다.
-그렇다면 당연히 비용도 따라온다.
-
-### 핵심 개념
-
-Client Component로 내릴수록 보통 아래 비용을 더 고려해야 한다.
-
-- **더 많은 클라이언트 자바스크립트 전송** — 해당 컴포넌트와 그 하위 import가 모두 번들에 포함
-- **더 많은 파싱/실행 비용** — 특히 저사양 모바일 기기에서 차이가 크다
-- **hydration 대상 증가** — 서버에서 프리렌더된 HTML을 클라이언트에서 다시 인터랙티브하게 만드는 비용
-- **브라우저 환경 의존 증가** — 테스트와 디버깅이 더 복잡해질 수 있다
-
-### 왜 이게 중요한가
-
-이걸 모르고 모든 걸 클라이언트로 두면
-Next.js를 쓰면서도 사실상 서버 컴포넌트의 이점을 많이 잃게 된다.
-
-즉 좋은 설계는:
-
-- 가능한 것은 서버에 두고
-- 꼭 인터랙션이 필요한 부분만 클라이언트로 내리는 것
-
-에 가깝다.
-
-### 자주 하는 오해
-
-- Client Component는 어차피 현대 브라우저가 다 감당한다 → 저사양 기기/느린 네트워크에선 체감 차이가 크다
-- 인터랙션 하나 있으면 페이지 전체를 클라이언트로 바꿔야 한다 → 더 작은 단위로 자를 수 있다
-- 클라이언트에서 fetch하는 게 더 단순하다 → 번들, 로딩, SEO, 데이터 계층을 같이 봐야 한다
-
-### 실무 연결
-
-실무에서는 자주 이런 판단이 나온다.
-
-- 상단 summary, 본문, 메타 정보 → 서버
-- 좋아요 버튼, 필터 토글, 정렬 드롭다운 → 클라이언트
-- 무거운 차트 상호작용 → 클라이언트 (+ `next/dynamic`으로 lazy load 고려)
-- 데이터 자체는 서버에서 준비 후 props로 전달 가능
-
-```tsx
-// 나쁜 예: 페이지 전체를 Client Component로 만든 경우
-"use client";
-
-export default function ProductPage() {
-  // 이제 서버 전용 fetch도 못 쓰고, 번들도 커진다
-  const [product, setProduct] = useState(null);
-  useEffect(() => {
-    fetch(`/api/products/1`)
-      .then((r) => r.json())
-      .then(setProduct);
-  }, []);
-  // ...
-}
-```
-
-```tsx
-// 좋은 예: 서버에서 데이터를 준비하고, 인터랙션만 클라이언트로
-// app/products/[id]/page.tsx (Server Component)
-import AddToCartButton from "./add-to-cart-button";
-
-export default async function ProductPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const product = await getProduct(params.id); // 서버에서 직접 데이터 조회
+  const handleSubmit = (formData: FormData) => {
+    startTransition(async () => {
+      await createPost(formData);
+    });
+  };
 
   return (
-    <div>
-      <h1>{product.name}</h1>
-      <p>{product.description}</p>
-      <AddToCartButton productId={product.id} />
-    </div>
+    <form action={handleSubmit}>
+      <input name="title" />
+      <button type="submit" disabled={isPending}>
+        {isPending ? "저장 중..." : "작성"}
+      </button>
+    </form>
   );
 }
 ```
 
-> 이제 클라이언트 경계 비용을 봤다. 그다음엔 자연스럽게 **데이터를 어디서 fetch하는가**로 넘어간다.
+### Server Actions vs Route Handlers
+
+| | Server Actions | Route Handlers |
+|---|---|---|
+| **선언** | `'use server'` 함수 | `route.ts` 파일 |
+| **호출 방식** | 함수 호출 / form action | HTTP 요청 (fetch) |
+| **용도** | 폼 제출, 데이터 mutation | 외부 API, webhook, BFF |
+| **타입 안전성** | 함수 시그니처로 자연스러움 | 요청/응답 수동 타이핑 |
+| **캐시 무효화** | `revalidatePath/Tag` 직접 호출 | 동일 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 게시글 작성을 Route Handler POST로 구현했는데, 작성 후 목록 갱신을 위해 클라이언트에서 다시 fetch → invalidate 하는 코드가 번거로웠다. Server Action으로 바꾸고 action 안에서 `revalidatePath("/posts")`를 호출하니, 작성 → 캐시 무효화 → 목록 갱신이 한 흐름으로 깔끔해짐.
+
+### 자주 하는 오해
+
+- Server Actions는 Route Handler를 완전히 대체한다 → **용도가 다르다.** 외부 webhook이나 BFF는 Route Handler가 더 적합.
+- `'use server'`는 `'use client'`의 반대다 → **아니다.** `'use server'`는 함수를 서버 실행으로 표시하는 것이고, `'use client'`는 컴포넌트를 클라이언트 번들에 포함시키는 경계다.
 
 ### 면접 압축 답변
 
-`'use client'`의 비용은 클라이언트 번들 증가, 파싱과 실행 비용 증가, hydration 대상 증가로 이어질 수 있다는 점입니다. 그래서 인터랙션이 필요한 부분만 작게 클라이언트 경계로 두고, 나머지는 서버에 남기는 설계가 보통 더 유리합니다.
+- **10초**: Server Actions는 `'use server'`로 표시된 함수로, 클라이언트에서 호출하면 서버에서 실행됩니다. 폼 제출과 mutation에 Route Handler 없이 직접 사용할 수 있습니다.
+- **30초**: Server Actions는 form action이나 함수 호출로 서버 mutation을 처리하고, `revalidatePath`/`revalidateTag`로 캐시 무효화까지 한 흐름으로 가능합니다. Route Handler는 외부 API나 webhook 같은 HTTP 엔드포인트에 여전히 필요합니다.
 
 ---
 
-## 72. App Router에서는 데이터를 어디서 가져오는 게 자연스러운가
+## 70. 데이터 페칭과 캐싱 설계
 
-App Router에서 데이터 페칭의 기본 감각은 **Server Component에서 직접 fetch하거나 DB/ORM에 접근**하는 것이다.
-Client Component에서는 React의 `use` API나 커뮤니티 라이브러리(SWR, React Query 등)를 활용할 수 있다.
+> **TL;DR** — Server Component에서 직접 fetch하는 것이 기본. 캐싱은 성능 옵션이 아니라 데이터 신선도 설계다. Next.js 15부터 fetch 기본값이 `no-store`이므로 캐시가 필요하면 명시적으로 설정해야 한다.
 
-### 핵심 개념
+### 데이터 페칭 위치
 
-App Router에선 기본적으로 아래 감각이 자연스럽다.
-
-- 서버에서 준비해도 되는 데이터는 Server Component에서 직접 fetch
-- 인터랙션에 반응해 클라이언트에서 갱신되는 데이터는 Client Component 또는 서버 상태 도구 활용
-- 서버와 클라이언트를 억지로 한쪽으로 몰지 말고 역할에 맞게 나눔
+| 데이터 성격 | 페칭 위치 | 이유 |
+|---|---|---|
+| 공개 콘텐츠 (게시글, 상품) | Server Component | 서버에서 직접 fetch, SEO, 번들 절감 |
+| 비밀값 필요 (API key, DB) | Server Component / Route Handler | 클라이언트에 노출 안 됨 |
+| 사용자 인터랙션 기반 (검색, 필터) | Client Component (SWR/React Query) | 실시간 반응 필요 |
+| 초기 데이터 + 후속 갱신 | 서버에서 초기 로드 + 클라이언트에서 갱신 | 하이브리드 패턴 |
 
 ```tsx
-// Server Component에서 데이터 페칭 (가장 기본적인 패턴)
-// app/users/page.tsx
+// Server Component — async/await로 직접 fetch
 export default async function UsersPage() {
-  // Server Component이므로 async/await를 직접 사용할 수 있다
-  const users = await fetch("https://api.example.com/users").then((res) =>
-    res.json()
-  );
-
-  return (
-    <ul>
-      {users.map((user: any) => (
-        <li key={user.id}>{user.name}</li>
-      ))}
-    </ul>
-  );
+  const users = await fetch("https://api.example.com/users").then((r) => r.json());
+  return <ul>{users.map((u) => <li key={u.id}>{u.name}</li>)}</ul>;
 }
-```
 
-```tsx
-// Client Component에서 데이터 페칭 (인터랙션 기반 갱신)
+// Client Component — 인터랙션 기반 fetch
 "use client";
-
 import useSWR from "swr";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-export default function SearchResults({ query }: { query: string }) {
-  const { data, error, isLoading } = useSWR(
-    query ? `/api/search?q=${query}` : null,
-    fetcher
-  );
-
+export default function SearchResults({ query }) {
+  const { data, isLoading } = useSWR(query ? `/api/search?q=${query}` : null, fetcher);
   if (isLoading) return <p>검색 중...</p>;
-  if (error) return <p>에러 발생</p>;
-  return (
-    <ul>
-      {data?.map((item: any) => (
-        <li key={item.id}>{item.title}</li>
-      ))}
-    </ul>
-  );
+  return <ul>{data?.map((item) => <li key={item.id}>{item.title}</li>)}</ul>;
 }
 ```
 
-### 왜 이게 중요한가
+### 캐싱 — 신선도와 성능의 트레이드오프
 
-이걸 이해하면:
-
-- 첫 화면 로딩 구조 — 서버에서 데이터가 준비되므로 로딩 스피너 없이 첫 화면 표시 가능
-- SEO 대응 — 서버에서 렌더된 HTML에 콘텐츠가 이미 포함
-- 비밀값 사용 위치 — API key나 DB 접근 정보를 서버에서만 사용
-- 캐시 전략 — fetch 옵션으로 캐시/재검증 제어
-- 클라이언트 번들 크기 — 데이터 페칭 로직이 서버에 있으면 번들에 포함 안 됨
-
-을 함께 판단할 수 있다.
-
-### 자주 하는 오해
-
-- App Router에선 무조건 서버 fetch만 해야 한다 → 틀림. 사용자 인터랙션에 반응하는 데이터는 클라이언트 fetch가 자연스러울 수 있다
-- 클라이언트 fetch는 구식이다 → 틀림. 실시간 데이터나 사용자 조작 기반 조회에는 여전히 필요하다
-- 클라이언트에서 가져오면 Next.js 장점을 잃는다 → 상황에 따라 필요한 패턴이다
-- Server Component에서 `useEffect`로 fetch한다 → 틀림. Server Component에서는 hooks를 사용할 수 없다. 대신 `async`/`await`를 직접 쓴다
-
-### 실무 연결
-
-예:
-
-- 게시글 본문, 상품 기본 정보, 공개 페이지 데이터 → 서버 fetch가 자연스러움
-- 검색 자동완성, 실시간 필터, 사용자 조작에 따른 즉시 재조회 → 클라이언트 fetch가 자연스러움
-- 초기 데이터는 서버에서 준비하고, 후속 갱신은 클라이언트에서 처리하는 하이브리드 패턴도 자주 쓰인다
-
-> 이제 fetch 위치를 봤다. 그다음엔 자연스럽게 **캐싱과 재검증을 어떻게 설계하는가**로 넘어간다.
-
-### 면접 압축 답변
-
-App Router에서는 서버에서 준비해도 되는 데이터는 Server Component에서 async/await로 직접 가져오고, 사용자 상호작용에 따라 자주 바뀌는 데이터는 Client Component에서 SWR이나 React Query 같은 도구로 다루는 구분이 자연스럽습니다. 핵심은 한쪽만 고집하는 게 아니라 데이터 성격에 맞게 fetch 위치를 정하는 것입니다.
-
----
-
-## 73. Next.js의 캐싱은 왜 "성능 옵션"이 아니라 설계 문제인가
-
-Next.js App Router는 `fetch` 옵션, `revalidatePath`, `revalidateTag` 같은 캐싱/재검증 도구를 제공한다.
-중요한 점은, Next.js 15부터 `fetch`의 기본 캐시 동작이 `no-store`로 변경되었다는 것이다.
-즉 명시적으로 캐시를 설정하지 않으면 매 요청마다 새로 가져온다.
-
-### 핵심 개념
-
-Next.js에서 캐싱을 생각할 때 중요한 질문은 이거다.
-
-- 이 데이터는 얼마나 자주 바뀌는가
-- 사용자마다 달라지는가
-- stale 허용이 가능한가
-- 빌드 시점에 만들어도 되는가
-- 재검증은 시간 기반인가, 이벤트 기반인가
+Next.js 15부터 `fetch`의 기본값이 `no-store`로 변경됨. 캐시가 필요하면 명시적으로 설정.
 
 ```tsx
-// 시간 기반 재검증: 60초마다 새로 가져옴
+// 시간 기반 재검증
 const data = await fetch("https://api.example.com/posts", {
-  next: { revalidate: 60 },
+  next: { revalidate: 60 }, // 60초마다 재생성
 });
 
-// 캐시 안 함: 매 요청마다 최신 데이터
+// 캐시 안 함 (기본값)
 const freshData = await fetch("https://api.example.com/dashboard", {
   cache: "no-store",
 });
 
-// 태그 기반 재검증: 특정 이벤트 발생 시 무효화
+// 태그 기반 재검증
 const taggedData = await fetch("https://api.example.com/products", {
   next: { tags: ["products"] },
 });
 ```
 
 ```tsx
-// Server Action에서 태그/경로 기반 수동 재검증
+// Server Action에서 수동 재검증
 "use server";
-
 import { revalidateTag, revalidatePath } from "next/cache";
 
 export async function updateProduct(id: string, data: FormData) {
   await db.products.update(id, data);
-
-  // 'products' 태그가 붙은 모든 fetch 결과 무효화
-  revalidateTag("products");
-
-  // 또는 특정 경로의 캐시를 무효화
-  revalidatePath("/products");
+  revalidateTag("products");    // 태그로 무효화
+  revalidatePath("/products");  // 경로로 무효화
 }
 ```
 
-### 왜 이게 중요한가
+### 캐시 판단 기준
 
-캐시는 단순히 "빠르게 해주는 옵션"이 아니라,
-**데이터 신선도와 성능 사이의 트레이드오프**를 정하는 설계다.
+| 데이터 | 캐시 전략 | 이유 |
+|---|---|---|
+| 마케팅 페이지, 문서 | `revalidate: 3600` (1시간) | 거의 안 바뀜 |
+| 블로그, 상품 상세 | `revalidate: 300` (5분) | 가끔 바뀜 |
+| 대시보드, 검색 결과 | `cache: 'no-store'` | 항상 최신 필요 |
+| mutation 후 | `revalidateTag/Path` | 즉시 반영 필요 |
 
-예를 들어:
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- 문서/블로그/상품 안내 페이지 → stale 허용 가능, `revalidate: 3600` 같은 긴 주기
-- 재고/알림/개인 대시보드 → 더 신선한 데이터 요구, `cache: 'no-store'`
-- 관리 페이지 수정 후 즉시 반영 → on-demand 재검증 (`revalidateTag`, `revalidatePath`)
+> 상품을 수정했는데 상품 목록에 반영이 안 되는 버그. 원인은 목록 페이지의 fetch에 `revalidate: 3600`이 걸려있어서 1시간 동안 이전 캐시를 보여줌. Server Action에서 수정 후 `revalidateTag("products")`를 호출하도록 바꿔서 mutation 후 즉시 반영.
 
 ### 자주 하는 오해
 
-- 캐시는 무조건 많이 걸수록 좋다 → stale 이슈가 생길 수 있다. 사용자에게 오래된 데이터가 보이면 UX 문제다
-- fetch만 캐시하면 끝이다 → 라우트 세그먼트 출력, Full Route Cache, Router Cache 등 여러 계층이 있다
-- 재검증은 시간만 정하면 된다 → mutation 이후 태그/경로 무효화가 더 정확한 경우가 많다
-- Next.js는 기본적으로 모든 fetch를 캐시한다 → Next.js 15부터 기본값이 `no-store`로 변경되었다
-
-### 실무 연결
-
-좋은 답변은 보통 이렇게 간다.
-
-- 정적인 콘텐츠는 더 aggressively 캐시 (`revalidate` 값을 길게)
-- 변경 후 즉시 반영이 필요한 데이터는 태그/경로 재검증 고려
-- 사용자별 개인화 데이터는 요청 시 처리 (`cache: 'no-store'`) or 짧은 캐시 전략 고려
-
-> 이제 캐싱을 큰 그림에서 봤다. 그다음엔 Next.js 안에서 서버 엔드포인트를 만드는 **Route Handlers**로 넘어간다.
+- 캐시는 무조건 많이 걸수록 좋다 → **stale 이슈가 생길 수 있다.**
+- Next.js는 기본적으로 모든 fetch를 캐시한다 → **Next.js 15부터 기본값이 `no-store`.**
+- 서버에서만 fetch해야 한다 → **인터랙션 기반 데이터는 클라이언트 fetch가 자연스럽다.**
 
 ### 면접 압축 답변
 
-Next.js의 캐싱은 단순 성능 옵션이 아니라 데이터 신선도와 응답 속도 사이의 트레이드오프를 설계하는 문제입니다. Next.js 15부터 fetch 기본값이 no-store로 바뀌었으므로, 캐시가 필요한 곳은 명시적으로 revalidate를 설정하고, mutation 후에는 revalidateTag/revalidatePath로 무효화하는 설계를 함께 가져가야 합니다.
+- **10초**: Server Component에서 async/await로 직접 fetch하는 것이 기본이고, 캐싱은 데이터 신선도에 따라 시간 기반 또는 태그 기반으로 설정합니다.
+- **30초**: Next.js 15부터 fetch 기본값이 no-store이므로 캐시가 필요하면 명시적으로 revalidate를 설정합니다. mutation 후에는 revalidateTag/Path로 관련 캐시를 무효화합니다. 인터랙션 기반 데이터는 Client Component에서 SWR/React Query로 처리하는 하이브리드 패턴이 일반적입니다.
 
 ---
 
-## 74. Route Handlers는 왜 필요하고, 어디에 쓰나
+## 71. Route Handlers와 BFF
 
-Route Handlers는 App Router의 `app` 디렉터리 안에서 `route.ts` 파일로 정의하며, Web Request/Response API 기반의 커스텀 요청 처리를 제공한다. Pages Router의 API Routes에 대응되는 역할이다.
+> **TL;DR** — Route Handlers는 Next.js 앱 안에서 서버 엔드포인트를 만드는 구조. BFF(Backend for Frontend) 패턴으로 여러 백엔드 API를 합치고, 비밀값을 숨기고, 프론트 친화적 응답을 만들 수 있다.
 
-### 핵심 개념
-
-Route Handlers는 Next.js 앱 안에서
-서버 엔드포인트를 직접 만들 수 있는 구조다.
+### Route Handler 기본
 
 ```tsx
 // app/api/users/route.ts
 import { NextResponse } from "next/server";
 
-// GET /api/users
 export async function GET() {
   const users = await db.users.findMany();
   return NextResponse.json(users);
 }
 
-// POST /api/users
 export async function POST(request: Request) {
   const body = await request.json();
   const user = await db.users.create(body);
@@ -769,235 +481,78 @@ export async function POST(request: Request) {
 }
 ```
 
-```tsx
-// app/api/products/[id]/route.ts
-import { NextResponse } from "next/server";
-
-// 동적 세그먼트를 활용한 Route Handler
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  const product = await db.products.findById(params.id);
-  if (!product) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  return NextResponse.json(product);
-}
-```
-
-주의할 점은, `route.ts`와 `page.tsx`는 같은 경로에 공존할 수 없다.
-예를 들어 `app/api/users/route.ts`와 `app/api/users/page.tsx`를 동시에 둘 수 없다.
-
-### 왜 이게 중요한가
-
-이게 필요한 이유는:
-
-- 외부 API를 감싸는 BFF 역할
-- 서버 전용 비밀값 사용 (API key, DB 접속 정보 등)
-- 요청 가공/검증/정규화
-- 웹훅 처리
-- 파일 업로드 처리
-
-같은 서버 문맥이 프론트 앱 옆에 자연스럽게 붙기 때문이다.
-
-### 자주 하는 오해
-
-- Next.js는 화면만 만들고 API는 별도 서버가 필수다 → 틀림. Route Handler로 서버 엔드포인트를 만들 수 있다
-- Route Handlers가 있으면 백엔드 설계는 불필요하다 → 틀림. 복잡한 비즈니스 로직이나 DB 설계는 여전히 별도 백엔드 영역이다
-- 모든 서버 로직을 Route Handlers에 몰아도 된다 → 역할 분리가 여전히 중요하다
-- Server Component에서 할 수 있는 일도 Route Handler로 해야 한다 → Server Component에서 직접 DB 접근이 가능하다면 굳이 Route Handler를 거칠 필요가 없다
-
-### 실무 연결
-
-대표적인 사용처:
-
-- 외부 CMS/API 응답 정리
-- 인증 토큰 부착 후 대리 요청
-- 클라이언트에 숨기고 싶은 API key 사용
-- webhook endpoint
-- 내부 BFF 계층
-
-> 이제 서버 엔드포인트 구조를 봤다. 그다음엔 실제 제품 설계 감각으로 자주 나오는 **BFF**로 넘어간다.
-
-### 면접 압축 답변
-
-Route Handlers는 App Router 안에서 서버 엔드포인트를 만들 수 있게 해주는 구조로, BFF 역할이나 외부 API 래핑, 웹훅 처리, 서버 비밀값 사용 같은 문맥에 잘 맞습니다. 단, Server Component에서 직접 데이터에 접근할 수 있는 경우에는 불필요한 Route Handler를 만들지 않는 판단도 중요합니다.
-
----
-
-## 75. BFF는 왜 프론트엔드 관점에서도 중요한가
-
-BFF(Backend for Frontend)는 프론트엔드 면접에서 자주 나오는 개념이다.
-특히 Next.js는 서버 경계를 앱 안에 두기 쉬워서 이 이야기를 하기가 좋다.
-
-### 핵심 개념
-
-BFF는 프론트엔드가 직접 여러 백엔드 서비스와 통신하는 대신,
-프론트엔드 요구에 맞게 가공된 서버 계층을 하나 두는 구조다.
-
-```
-[클라이언트]
-    |
-    v
-[BFF (Next.js Route Handler)]
-    |
-    |-- [사용자 서비스 API]
-    |-- [상품 서비스 API]
-    +-- [리뷰 서비스 API]
-```
-
-### 왜 이게 중요한가
-
-BFF를 두면:
-
-- 여러 API 응답을 합쳐서 프론트 친화적 shape로 만들 수 있고
-- 인증/인가 로직을 중앙화할 수 있고
-- 클라이언트에 비밀값을 숨길 수 있고
-- 요청 수를 줄이거나 응답을 더 프론트 친화적으로 정리할 수 있다
+### BFF 패턴 — 여러 API를 합쳐 프론트 친화적 응답
 
 ```tsx
 // app/api/product-detail/[id]/route.ts
-// BFF 역할: 여러 API를 합쳐 프론트 친화적 응답 구성
-import { NextResponse } from "next/server";
-
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  // 여러 백엔드 서비스에 병렬 요청
+export async function GET(request: Request, { params }) {
   const [product, reviews, inventory] = await Promise.all([
     fetch(`${PRODUCT_API}/products/${params.id}`).then((r) => r.json()),
     fetch(`${REVIEW_API}/reviews?productId=${params.id}`).then((r) => r.json()),
     fetch(`${INVENTORY_API}/stock/${params.id}`).then((r) => r.json()),
   ]);
 
-  // 프론트엔드가 필요한 형태로 가공
   return NextResponse.json({
     id: product.id,
     name: product.name,
     price: product.price,
     reviewCount: reviews.length,
-    averageRating:
-      reviews.reduce((sum: number, r: any) => sum + r.rating, 0) /
-      reviews.length,
+    averageRating: reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length,
     inStock: inventory.quantity > 0,
   });
 }
 ```
 
-### 자주 하는 오해
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- BFF는 거창한 대규모 시스템에만 필요하다 → 작은 규모에서도 유용할 수 있다
-- Route Handler를 만들면 곧 BFF다 → 역할과 목적을 더 분명히 가져가야 한다. 단순히 외부 API를 그대로 프록시만 하는 건 BFF가 아니다
-- BFF가 있으면 프론트가 단순해진다 → 때론 백엔드/프론트 경계 설계가 더 중요해진다
+> 상품 상세 페이지에서 상품 정보, 리뷰, 재고를 3개 API에서 가져오는데 클라이언트에서 3번 fetch하니 로딩이 길었다. Route Handler에서 `Promise.all`로 3개를 병렬 요청하고 프론트 친화적 shape로 합쳐서 내려주니 클라이언트는 1번만 호출. 로딩 시간이 3초에서 1초로 줄어듦.
 
-### 실무 연결
+### Route Handler vs Server Action vs Server Component
 
-예:
+| | Server Component | Server Action | Route Handler |
+|---|---|---|---|
+| **용도** | 데이터 조회 + UI | 폼 제출, mutation | HTTP 엔드포인트, webhook |
+| **호출** | 렌더링 시 자동 | 함수 호출 / form action | fetch로 HTTP 요청 |
+| **외부 접근** | 불가 | 불가 | 가능 (webhook 등) |
 
-- 상품 상세를 위해 리뷰, 재고, 추천 API를 합쳐 하나로 제공
-- 사용자별 권한 확인 후 필요한 필드만 프론트에 제공
-- 외부 API 스키마를 내부 UI 친화적 모델로 바꿔 전달
-
-> 이제 서버 계층을 앱 가까이에 두는 이유를 봤다. 그다음엔 라우팅과 상태가 만나는 대표 주제인 **URL 상태 설계**로 넘어간다.
+Server Component에서 직접 DB 접근이 가능하면 굳이 Route Handler를 거칠 필요가 없다. Route Handler는 **외부에서 접근해야 하는 엔드포인트**(webhook, 외부 서비스 연동)나 **BFF 역할**에 적합.
 
 ### 면접 압축 답변
 
-BFF는 프론트엔드 요구에 맞는 서버 계층을 두어 여러 백엔드 응답을 가공하고 인증, 비밀값, 응답 정규화를 처리하는 구조입니다. Next.js에서는 Route Handlers 같은 서버 경계를 통해 이런 역할을 앱 가까이에 둘 수 있다는 점이 중요합니다.
+- **10초**: Route Handlers는 앱 안에서 서버 엔드포인트를 만들고, BFF로 여러 API를 합쳐 프론트 친화적 응답을 제공합니다.
+- **30초**: Server Component에서 직접 데이터를 가져올 수 있으면 Route Handler는 불필요합니다. Route Handler는 외부 webhook, BFF, 비밀값 사용 같은 HTTP 엔드포인트가 필요한 경우에 적합하고, mutation은 Server Actions가 더 자연스럽습니다.
 
 ---
 
-## 76. URL 상태는 왜 전역 상태와 다른 축으로 봐야 하나
+## 72. URL 상태와 Middleware
 
-필터, 정렬, 탭, 페이지네이션 같은 값을 어디에 둘지는 프론트엔드 설계에서 자주 헷갈리는 지점이다.
-이때 중요한 질문은 이거다.
+> **TL;DR** — 공유/복원/뒤로가기가 필요한 상태는 URL에 둔다. Middleware는 요청 초반에 인증 리다이렉트, locale 분기 같은 공통 정책을 적용하는 Edge 계층이다.
 
-> **이 상태는 새로고침, 공유 링크, 뒤로가기/앞으로가기에 살아 있어야 하는가?**
+### URL 상태 — 언제 URL에 두나
 
-그렇다면 URL 상태 후보일 가능성이 크다.
+> **"이 URL을 다른 사람에게 공유했을 때 의미가 있는가?"**가 기준이다.
 
-### 핵심 개념
-
-URL 상태는 단순 UI 메모리가 아니라,
-**라우팅과 탐색의 일부가 되는 상태**다.
-
-예:
-
-- 검색어 → `?q=nextjs`
-- 필터 → `?category=frontend`
-- 정렬 → `?sort=latest`
-- 현재 페이지 → `?page=3`
-- 선택된 탭 → `?tab=reviews`
-- 상세 모달 대상 id → `?modal=product-123`
-
-### 왜 이게 중요한가
-
-URL 상태로 두면 얻는 이점이 있다.
-
-- 공유 가능한 링크 — 상대방이 같은 URL로 같은 화면을 본다
-- 새로고침 후 복원 — `useState`와 달리 날아가지 않는다
-- 브라우저 히스토리와 정합성 — 뒤로가기가 기대대로 동작한다
-- 검색/필터 화면의 사용성 향상
-
-### 자주 하는 오해
-
-- 상태는 전부 store에 두는 게 관리가 쉽다 → URL이 더 자연스러운 상태도 많다
-- URL 상태는 SEO용이다 → 탐색성과 복원성도 중요하다
-- 사소한 토글도 URL에 넣어야 한다 → 노이즈가 될 수 있다. "이 URL을 다른 사람에게 공유했을 때 의미가 있는가?"가 기준이다
-
-### 실무 연결
-
-좋은 기준:
-
-- 공유할 가치가 있는가 → URL
-- 뒤로가기에서 기대되는가 → URL
-- 외부에서 직접 진입할 때 복원돼야 하는가 → URL
-- 앱 내부 일시 인터랙션에 가깝나 → `useState`
-
-> 이제 URL 상태를 봤다. 그다음엔 Next.js에서 **서버와 클라이언트가 URL 상태를 어떻게 함께 다루는가**로 이어진다.
-
-### 면접 압축 답변
-
-URL 상태는 단순 전역 상태가 아니라 라우팅과 탐색의 일부가 되는 상태입니다. 검색어, 필터, 정렬, 페이지네이션처럼 공유 링크와 새로고침 복원, 뒤로가기 정합성이 중요한 값은 store보다 URL에 두는 편이 더 자연스러운 경우가 많습니다.
-
----
-
-## 77. Next.js에서 URL 상태와 데이터 페칭은 어떻게 함께 설계하나
-
-URL 상태를 이해했다면 다음 질문은 자연스럽다.
-
-> **query string이나 route param이 바뀌면, 데이터는 어디서 다시 가져와야 할까?**
-
-### 핵심 개념
-
-App Router에선 URL이 서버 렌더링과 데이터 페칭의 입력값이 될 수 있다.
-즉 URL 상태는 단순 클라이언트 메모리가 아니라,
-**서버 fetch의 key 역할**도 할 수 있다.
-
-Server Component에서는 `searchParams` prop으로 query string에 접근하고,
-Client Component에서는 `useSearchParams` 훅으로 읽는다.
+| URL에 적합 | URL에 부적합 |
+|---|---|
+| 검색어 `?q=nextjs` | 모달 열림/닫힘 (대부분) |
+| 필터 `?category=frontend` | 드래그 좌표 |
+| 정렬 `?sort=latest` | 호버 상태 |
+| 페이지네이션 `?page=3` | 임시 입력값 |
+| 선택된 탭 `?tab=reviews` | 토스트 알림 |
 
 ```tsx
-// Server Component에서 URL 상태를 데이터 페칭에 활용
-// app/products/page.tsx
-export default async function ProductsPage({
-  searchParams,
-}: {
-  searchParams: { sort?: string; page?: string; category?: string };
-}) {
+// Server Component에서 URL 상태로 데이터 페칭
+export default async function ProductsPage({ searchParams }) {
   const sort = searchParams.sort || "latest";
   const page = searchParams.page || "1";
-  const category = searchParams.category || "all";
 
-  // URL 상태가 곧 서버 fetch의 key가 된다
   const products = await fetch(
-    `https://api.example.com/products?sort=${sort}&page=${page}&category=${category}`
-  ).then((res) => res.json());
+    `https://api.example.com/products?sort=${sort}&page=${page}`
+  ).then((r) => r.json());
 
   return (
     <div>
-      <FilterBar currentSort={sort} currentCategory={category} />
+      <FilterBar currentSort={sort} />
       <ProductList products={products} />
       <Pagination currentPage={Number(page)} />
     </div>
@@ -1007,88 +562,29 @@ export default async function ProductsPage({
 
 ```tsx
 // Client Component에서 URL 상태 변경
-// app/products/filter-bar.tsx
 "use client";
-
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function FilterBar({
-  currentSort,
-  currentCategory,
-}: {
-  currentSort: string;
-  currentCategory: string;
-}) {
+export default function FilterBar({ currentSort }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  function updateFilter(key: string, value: string) {
+  function updateFilter(key, value) {
     const params = new URLSearchParams(searchParams.toString());
     params.set(key, value);
     router.push(`/products?${params.toString()}`);
   }
 
   return (
-    <div>
-      <select
-        value={currentSort}
-        onChange={(e) => updateFilter("sort", e.target.value)}
-      >
-        <option value="latest">최신순</option>
-        <option value="price">가격순</option>
-        <option value="popular">인기순</option>
-      </select>
-      {/* ... 카테고리 필터 등 */}
-    </div>
+    <select value={currentSort} onChange={(e) => updateFilter("sort", e.target.value)}>
+      <option value="latest">최신순</option>
+      <option value="price">가격순</option>
+    </select>
   );
 }
 ```
 
-### 왜 이게 중요한가
-
-이 설계를 잘하면:
-
-- 새로고침 시 같은 결과 복원
-- 공유 링크로 같은 화면 복원
-- 서버에서 초기 데이터 준비 (SEO에도 유리)
-- 클라이언트에서 후속 인터랙션 확장
-
-이 자연스러워진다.
-
-### 자주 하는 오해
-
-- 필터는 클라이언트 state로만 둬야 한다 → URL/서버 입력으로 함께 갈 수 있다
-- URL이 바뀌면 무조건 전체 페이지를 클라이언트에서 다시 그린다 → App Router에서는 URL 변경 시 서버에서 해당 세그먼트만 다시 렌더할 수 있다
-- 모든 검색 입력을 즉시 URL에 반영해야 한다 → debounce나 commit 시점 분리가 필요할 수 있다
-
-### 실무 연결
-
-예:
-
-- `/products?sort=price&page=2` — 정렬과 페이지네이션
-- `/dashboard?tab=analytics` — 탭 상태
-- `/search?q=nextjs` — 검색어
-
-이런 값들은
-단순 UI 상태이면서 동시에 데이터 조회 기준이 된다.
-
-> 이제 URL과 데이터가 연결되는 구조를 봤다. 그다음엔 요청을 가로채거나 초기 단계에서 분기하는 **middleware** 로 넘어간다.
-
-### 면접 압축 답변
-
-Next.js에서는 URL 상태가 단순 클라이언트 메모리가 아니라 서버 데이터 페칭의 입력값이 될 수 있습니다. Server Component에서는 searchParams prop으로, Client Component에서는 useSearchParams 훅으로 접근하며, 이를 통해 공유와 복원성뿐 아니라 초기 서버 데이터 준비와도 자연스럽게 연결됩니다.
-
----
-
-## 78. Middleware는 언제 유용하고, 언제 과용되기 쉬운가
-
-Next.js에선 요청 초기에 특정 로직을 적용하고 싶을 때 middleware를 고려할 수 있다.
-다만 이건 만능 훅처럼 쓰는 게 아니라, 정말 요청 초반 공통 분기가 필요할 때 생각하는 게 좋다.
-
-### 핵심 개념
-
-middleware는 라우트 진입 전에 실행되는 공통 요청 처리 계층으로 볼 수 있다.
-프로젝트 루트의 `middleware.ts` 파일 하나로 정의하며, `matcher` 설정으로 적용 경로를 제한한다.
+### Middleware — 요청 초반 공통 분기
 
 ```tsx
 // middleware.ts (프로젝트 루트)
@@ -1096,134 +592,56 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  // 인증 토큰 확인
   const token = request.cookies.get("auth-token");
 
-  // 로그인이 필요한 경로에서 토큰이 없으면 리다이렉트
   if (!token && request.nextUrl.pathname.startsWith("/dashboard")) {
     return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  // locale 분기
-  const locale = request.headers.get("accept-language")?.split(",")[0] || "ko";
-  if (request.nextUrl.pathname === "/") {
-    return NextResponse.redirect(new URL(`/${locale}`, request.url));
   }
 
   return NextResponse.next();
 }
 
-// 적용 경로 제한
 export const config = {
-  matcher: ["/dashboard/:path*", "/"],
+  matcher: ["/dashboard/:path*"],
 };
 ```
 
-middleware는 Edge Runtime에서 실행된다.
-따라서 Node.js 전용 API(fs, 무거운 DB 드라이버 등)는 사용할 수 없다는 제약이 있다.
+| Middleware에 적합 | Middleware에 부적합 |
+|---|---|
+| 인증 토큰 존재 확인 → 리다이렉트 | 실제 권한 검증 (DB 조회) |
+| locale/국가 분기 | 무거운 비즈니스 로직 |
+| A/B 테스트 rewrite | DB 접근 (Edge Runtime 제약) |
+| 봇 트래픽 감지 | 복잡한 데이터 처리 |
 
-### 왜 이게 중요한가
+### 실무 에피소드 — 이런 상황에서 만난다
 
-middleware를 이해하면
-페이지 컴포넌트 안에서 하기엔 너무 늦은 작업과,
-요청 초기에 걸러야 하는 작업을 구분하게 된다.
-
-### 자주 하는 오해
-
-- 로직은 다 middleware에 두면 깔끔하다 → 과하면 복잡성과 디버깅 난이도가 커진다
-- middleware는 클라이언트 라우팅 훅 같은 것이다 → 서버/엣지 쪽 요청 경계에 더 가깝다
-- 인증은 무조건 middleware에서 해야 한다 → middleware에서는 토큰 존재 여부 같은 가벼운 확인만 하고, 실제 권한 검증은 서버 컴포넌트나 Route Handler에서 하는 게 일반적이다
-- middleware에서 DB를 조회해도 된다 → Edge Runtime 제약으로 무거운 DB 드라이버를 쓸 수 없는 경우가 많다
-
-### 실무 연결
-
-예:
-
-- 로그인 안 된 사용자는 `/dashboard` 접근 시 `/login`으로 리다이렉트
-- 국가/언어별 경로 분기
-- 특정 실험군에 따른 rewrite
-- 봇 트래픽 감지 후 분기
-
-> 이제 Next.js의 요청 초반 경계까지 봤다. 그다음엔 이 모든 걸 합쳐 **서버 중심 기본값 + 필요한 곳만 클라이언트**라는 설계 원칙으로 정리한다.
+> 검색 결과 페이지에서 필터를 useState로 관리했는데, 결과를 공유하면 상대방에게 필터 없는 기본 화면이 보이는 문제. 필터값을 URL search params로 옮기니 공유 링크에 필터가 포함되어 같은 화면이 복원됨. 서버에서도 searchParams로 접근해서 초기 데이터를 미리 준비할 수 있게 됨.
 
 ### 면접 압축 답변
 
-middleware는 요청 초기에 공통 정책을 적용해야 할 때 유용합니다. 예를 들어 인증 리다이렉트, locale 분기, rewrite 같은 작업에 잘 맞지만, Edge Runtime에서 실행되므로 Node.js 전용 API를 쓸 수 없고, 모든 로직을 몰아넣는 만능 계층으로 쓰면 오히려 구조가 복잡해질 수 있습니다.
+- **10초**: 공유/복원/뒤로가기가 필요한 상태는 URL에, 요청 초반 공통 정책(인증 리다이렉트, locale)은 Middleware에 둡니다.
+- **30초**: URL 상태는 Server Component의 searchParams로 서버 데이터 페칭의 입력값이 될 수 있어서, 공유 링크 복원뿐 아니라 SEO와 초기 데이터 준비에도 유리합니다. Middleware는 Edge Runtime에서 실행되므로 가벼운 확인(토큰 존재, locale 분기)에 적합하고, DB 접근 같은 무거운 작업은 Server Component나 Route Handler에서 처리합니다.
 
 ---
 
-## 79. Next.js App Router에서 좋은 기본 설계 원칙은 무엇인가
+# 다음 챕터로의 연결
 
-여기까지 오면 Next.js를 단순 기능 모음이 아니라 설계 원칙으로 볼 수 있어야 한다.
+이 챕터에서 다룬 것을 한 줄로 요약하면:
 
-### 핵심 원칙
+> **"React 앱을 서버·클라이언트·캐시·라우팅·데이터 경계까지 포함해 어떻게 설계할 것인가"**
 
-1. **기본은 서버 중심으로 생각한다** — App Router에서 컴포넌트는 기본이 Server Component다
-2. **인터랙션이 필요한 부분만 클라이언트로 내린다** — `'use client'`는 가능한 leaf 쪽에
-3. **URL은 탐색 가능한 상태만 담는다** — "공유했을 때 의미 있는가?"가 기준
-4. **서버 데이터와 클라이언트 UI 상태를 구분한다** — 성격이 다른 상태를 같은 store에 몰지 않는다
-5. **캐시는 성능 옵션이 아니라 데이터 신선도 설계다** — 데이터마다 다른 캐시 전략
-6. **서버 경계(Route Handlers/BFF)는 외부 API와 비밀값, 응답 정규화에 활용한다**
-7. **`'use client'`는 경계 비용이 있다는 걸 항상 의식한다** — 번들 크기와 hydration 범위
+### 좋은 기본 설계 원칙
 
-### 왜 이게 중요한가
+1. **기본은 서버 중심** — App Router의 기본값이 Server Component
+2. **인터랙션이 필요한 부분만 클라이언트로** — `'use client'`는 leaf 쪽에
+3. **mutation은 Server Actions로** — Route Handler는 외부 엔드포인트용
+4. **URL은 탐색 가능한 상태만** — "공유했을 때 의미 있는가?"
+5. **캐시는 신선도 설계** — 데이터마다 다른 전략
+6. **서버 경계는 비밀값과 응답 정규화에** — BFF로 프론트 친화적 shape
 
-이 원칙이 있으면
-Next.js 면접 질문이 기능별 암기가 아니라
-**구조적 판단 근거**로 바뀐다.
+다음 챕터(챕터 7)에서는 **네트워크와 브라우저 기초**로 넘어간다.
 
-### 자주 하는 오해
-
-- Next.js 정답은 항상 서버 우선이다 → 인터랙션 요구사항과 데이터 성격을 같이 봐야 한다
-- 페이지 단위로만 생각하면 된다 → layout/segment/boundary 감각이 중요하다
-- fetch 위치만 정하면 설계가 끝난다 → 캐시, 재검증, URL 상태, 경계 설계가 같이 간다
-
-### 면접 압축 답변
-
-Next.js App Router에서 좋은 기본 원칙은 서버 중심으로 시작하되, 인터랙션이 필요한 부분만 클라이언트로 내리고, URL 상태와 서버 상태, 로컬 UI 상태를 분리해서 설계하는 것입니다. 여기에 캐시와 서버 경계까지 함께 보면 기능 암기보다 구조적 판단이 가능해집니다.
-
----
-
-## 80. 이 챕터를 읽고 나면 무엇이 연결되어야 하나
-
-이 챕터를 다 읽고 나면 아래 흐름이 한 덩어리로 보여야 한다.
-
-- Next.js는 React 위에 앱 구조를 얹어주는 프레임워크다
-- App Router는 현재 공식 문서 기준의 중심 구조다
-- 렌더링 전략은 SSR/SSG/ISR/CSR 같은 시점과 캐시 문제를 포함한다
-- Server Component와 Client Component는 실행 환경 분리다
-- `'use client'`는 진입 경계 선언이자 번들 경계다
-- 데이터 fetch 위치는 서버/클라이언트 역할에 따라 달라진다
-- 캐시는 성능과 신선도의 트레이드오프 설계다
-- Route Handlers와 BFF는 서버 경계를 앱 가까이에 둘 수 있게 한다
-- URL 상태는 탐색 가능한 상태를 담는 좋은 자리다
-- middleware는 요청 초반 공통 분기에 유용하다
-- 좋은 기본값은 "서버 중심 + 필요한 곳만 클라이언트"다
-
-즉,
-이번 챕터는 단순히 Next.js API를 배우는 챕터가 아니라,
-**"React 앱을 서버·클라이언트·캐시·라우팅·데이터 경계까지 포함해 어떻게 설계할 것인가"**를 배우는 챕터다.
-
----
-
-# 이 챕터를 읽은 뒤 자연스럽게 이어질 다음 질문들
-
-1. 브라우저 요청은 DNS부터 응답까지 어떤 흐름으로 가나?
-2. HTTP와 HTTPS, TLS는 각각 어떤 역할을 하나?
-3. 메서드와 멱등성은 왜 retry 설계와 연결되나?
-4. 쿠키, 세션, 토큰은 어떻게 구분해야 하나?
-5. CORS, 캐시 헤더, CDN은 프론트엔드 성능과 어떻게 연결되나?
-
----
-
-# 사용법
-
-이 챕터는 아래 순서로 보면 좋다.
-
-1. Next.js가 React 위에서 푸는 문제를 먼저 잡는다.
-2. App Router와 렌더링 전략으로 큰 그림을 이해한다.
-3. Server/Client Components와 `'use client'`로 실행 환경 경계를 익힌다.
-4. 데이터 fetch, 캐싱, Route Handlers, BFF로 서버 경계를 구조화한다.
-5. URL 상태와 middleware까지 합쳐 앱 설계 감각으로 정리한다.
-
-이렇게 보면 Next.js가 단순 SSR 프레임워크가 아니라, 서버와 클라이언트의 책임을 나눠 애플리케이션 구조를 설계하게 만드는 도구라는 감각이 더 선명해진다.
+- 브라우저 요청은 DNS부터 응답까지 어떤 흐름으로 가나?
+- HTTP와 HTTPS, TLS는 각각 어떤 역할을 하나?
+- 쿠키, 세션, 토큰은 어떻게 구분해야 하나?
+- CORS, 캐시 헤더, CDN은 프론트엔드 성능과 어떻게 연결되나?

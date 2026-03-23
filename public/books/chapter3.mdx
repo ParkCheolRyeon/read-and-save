@@ -2,7 +2,7 @@
 title: "비동기 실행 모델에서 race condition까지"
 chapter: "03"
 summary: "동기/비동기, 이벤트 루프, Promise, async/await, race condition과 실무 대응 전략을 이해하는 챕터입니다."
-estimatedReadMinutes: 45
+estimatedReadMinutes: 55
 learningGoals:
   - "동기/비동기와 블로킹/논블로킹의 차이를 구분한다"
   - "이벤트 루프, Promise, async/await의 실행 순서를 설명한다"
@@ -15,198 +15,257 @@ learningGoals:
 
 > **비동기 문법을 외우는 것이 아니라, 브라우저가 일을 어떤 순서로 처리하는지 이해해서 실무 버그를 설명할 수 있어야 한다.**
 
+### 전체 흐름 맵
+
+```
+동기 / 비동기 (흐름 설계 방식)
+  → 블로킹 / 논블로킹 (제어권 반환 시점)
+    → 이벤트 루프 (실행 순서를 결정하는 구조)
+      → Promise (비동기 결과를 다루는 추상화)
+        → async/await (Promise 위의 문법적 설탕)
+          → Promise 조합 (all, allSettled, race, any)
+            → Race Condition (응답 순서 꼬임)
+              → AbortController (이전 요청 취소)
+                → timeout / retry / backoff (실패 복구)
+                  → debounce / throttle / 중복 방지 (요청 빈도 제어)
+```
+
 ---
 
 ## 21. 동기와 비동기의 차이는 무엇인가
 
-자바스크립트 면접에서 비동기 질문은 거의 반드시 나온다.
-그런데 여기서 많은 사람이 “오래 걸리면 비동기” 정도로 설명해서 흐려진다.
+> **TL;DR** — 동기는 현재 작업이 끝날 때까지 다음으로 넘어가지 않는 방식, 비동기는 작업 완료를 기다리지 않고 다른 흐름을 계속 진행하는 방식이다. 핵심은 속도가 아니라 **제어 흐름 차이**다.
+
+자바스크립트 면접에서 비동기 질문은 거의 반드시 나온다. 그런데 여기서 많은 사람이 "오래 걸리면 비동기" 정도로 설명해서 흐려진다.
 
 ### 핵심 개념
 
-- 동기는 현재 작업이 끝날 때까지 다음 흐름으로 넘어가지 않는 방식이다.
-- 비동기는 작업 완료를 기다리는 동안에도 다른 흐름을 계속 진행할 수 있게 설계된 방식이다.
-- 핵심은 속도 차이가 아니라 **제어 흐름 차이**다.
+| | 동기 (Synchronous) | 비동기 (Asynchronous) |
+|---|---|---|
+| **흐름** | 현재 작업이 끝나야 다음으로 진행 | 작업 완료를 기다리지 않고 다음 진행 |
+| **결과 수신** | 호출 즉시 결과를 받음 | 나중에 콜백/Promise 등으로 결과를 받음 |
+| **핵심** | 순서 보장 | 흐름 양보 |
 
-### 왜 이게 중요한가
+```js
+console.log("start");
 
-이걸 정확히 잡아야 다음 질문들이 자연스럽게 이어진다.
+setTimeout(() => {
+  console.log("timeout");
+}, 0);
 
-- Promise는 왜 필요한가
-- `async/await`는 무엇을 감추는가
-- 이벤트 루프는 어떤 역할을 하는가
-- React에서 비동기 요청 버그는 왜 생기는가
+console.log("end");
+```
+
+출력 순서: `start` → `end` → `timeout`
+
+이 코드는 시간이 오래 걸려서 비동기인 게 아니다. 타이머 콜백이 현재 실행 흐름이 끝난 뒤 나중에 처리되도록 **예약**되기 때문에 비동기다.
+
+### 콜백에서 Promise까지 — 비동기 처리의 진화
+
+초기 자바스크립트는 콜백 중심이었다. Node.js의 error-first callback 패턴이 대표적이다.
+
+```js
+// 1단계: 콜백 — 중첩이 깊어지면 callback hell
+readFile("a.txt", (err, dataA) => {
+  if (err) return handleError(err);
+  readFile("b.txt", (err, dataB) => {
+    if (err) return handleError(err);
+    readFile("c.txt", (err, dataC) => {
+      if (err) return handleError(err);
+      // 세 파일 모두 읽은 뒤 처리
+    });
+  });
+});
+
+// 2단계: Promise — 체이닝으로 평탄화
+readFile("a.txt")
+  .then(() => readFile("b.txt"))
+  .then(() => readFile("c.txt"))
+  .catch(handleError);
+
+// 3단계: async/await — 동기 코드처럼 읽힘
+async function readAll() {
+  const a = await readFile("a.txt");
+  const b = await readFile("b.txt");
+  const c = await readFile("c.txt");
+}
+```
+
+이 진화를 이해하면 Promise가 왜 나왔는지, async/await가 왜 필요했는지가 자연스럽게 연결된다.
 
 ### 자주 하는 오해
 
-- 비동기는 무조건 빠르다 → 틀림
-- 오래 걸리는 작업은 다 비동기다 → 틀림
-- `async/await`를 쓰면 동기 코드가 된다 → 틀림. 문법이 동기처럼 보일 뿐이다
-
-### 예시
-
-```ts
-console.log(“start”);
-
-setTimeout(() => {
-  console.log(“timeout”);
-}, 0);
-
-console.log(“end”);
-```
-
-출력 순서는 `start` → `end` → `timeout`이다.
-이 코드는 시간이 오래 걸려서 비동기인 게 아니다.
-타이머 콜백이 현재 실행 흐름이 끝난 뒤 나중에 처리되도록 예약되기 때문에 비동기다.
-
-### 실무 연결
-
-프론트엔드에서 사용자 입력, 네트워크 요청, 타이머, 애니메이션 이벤트, 파일 업로드는 대부분 비동기 흐름과 연결된다.
-그래서 비동기를 이해하지 못하면 “가끔 늦게 뜨는 버그”, “옛날 데이터가 덮어쓰는 버그”, “로딩 상태가 꼬이는 버그”를 설명하기 어렵다.
-
-> 동기/비동기를 알았다면, 다음엔 자주 같이 헷갈리는 블로킹/논블로킹과의 차이를 짚어야 한다.
+- 비동기는 무조건 빠르다 → **틀림.** 비동기는 "기다리는 동안 다른 일을 할 수 있다"는 뜻이지 작업 자체가 빨라지는 건 아니다.
+- 오래 걸리는 작업은 다 비동기다 → **틀림.** 무거운 동기 연산(큰 배열 정렬 등)은 오래 걸려도 동기다.
+- `async/await`를 쓰면 동기 코드가 된다 → **틀림.** 문법이 동기처럼 보일 뿐, 내부는 여전히 Promise 기반 비동기다.
 
 ### 면접 압축 답변
 
-동기는 현재 작업이 끝날 때까지 다음 흐름으로 넘어가지 않는 방식이고, 비동기는 작업 완료를 기다리는 동안 다른 흐름을 계속 진행할 수 있게 한 방식입니다. 핵심은 속도가 아니라 제어 흐름 차이입니다.
+- **10초**: 동기는 현재 작업이 끝날 때까지 다음 흐름으로 넘어가지 않는 방식이고, 비동기는 작업 완료를 기다리는 동안 다른 흐름을 계속 진행할 수 있게 한 방식입니다. 핵심은 속도가 아니라 제어 흐름 차이입니다.
+- **30초**: 동기는 호출 즉시 결과를 받고 순서가 보장되는 반면, 비동기는 결과를 나중에 받으며 그 사이에 다른 작업을 진행할 수 있습니다. 자바스크립트에서 비동기 처리 방식은 콜백 → Promise → async/await로 발전해왔고, 이 진화의 핵심은 가독성과 에러 처리의 일관성을 높이는 것이었습니다.
+
+> 동기/비동기를 알았다면, 다음엔 자주 같이 헷갈리는 블로킹/논블로킹과의 차이를 짚어야 한다.
 
 ---
 
 ## 22. 블로킹과 논블로킹은 왜 동기/비동기와 별개인가
 
-동기/비동기와 블로킹/논블로킹은 같이 나오지만 같은 말은 아니다.
+> **TL;DR** — 동기/비동기는 "흐름 설계"이고, 블로킹/논블로킹은 "제어권이 언제 돌아오는가"다. 이 두 축은 독립적이며, 조합에 따라 4가지 패턴이 된다.
 
-### 핵심 개념
+### 2x2 매트릭스
 
-- 블로킹은 호출한 쪽이 결과를 받을 때까지 제어권을 돌려받지 못하는가에 대한 이야기다.
-- 논블로킹은 호출 후 바로 제어권을 돌려받을 수 있는가에 대한 이야기다.
+| | 블로킹 | 논블로킹 |
+|---|---|---|
+| **동기** | 결과 올 때까지 멈추고 기다림 (가장 직관적) | 결과 안 왔으면 즉시 "아직 없음" 반환, 직접 다시 확인 |
+| **비동기** | 작업을 맡기고 결과가 올 때까지 멈춤 (드묾) | 작업을 맡기고 바로 다른 일, 결과는 나중에 콜백으로 (가장 흔한 JS 비동기) |
 
-즉:
-
-- 동기/비동기는 흐름 설계
-- 블로킹/논블로킹은 제어권 반환 시점
-
-에 더 가깝다.
-
-### 왜 이게 중요한가
-
-이걸 구분해야 브라우저와 네트워크, 파일 처리, 사용자 입력, 긴 계산을 정확히 설명할 수 있다.
-
-### 예시: 메인 스레드를 막는 동기 블로킹
-
-```ts
+```js
 // 동기 + 블로킹: 5초 동안 메인 스레드가 완전히 멈춘다
 function heavySync() {
   const start = Date.now();
-  while (Date.now() - start < 5000) {
-    // 아무것도 하지 않지만 CPU를 점유한다
-  }
+  while (Date.now() - start < 5000) {} // CPU 점유
   console.log("done");
 }
-
 heavySync();
 // 이 5초 동안 클릭, 스크롤, 애니메이션 전부 멈춘다
-```
 
-```ts
 // 비동기 + 논블로킹: 제어권을 즉시 돌려받는다
 fetch("/api/data").then((res) => res.json());
 console.log("fetch 호출 직후 바로 실행됨");
 ```
 
-두 코드를 비교하면 핵심이 보인다. 첫 번째는 작업이 끝날 때까지 제어권을 돌려주지 않고(블로킹), 두 번째는 호출 즉시 제어권을 돌려준다(논블로킹).
+### 브라우저에서 블로킹이 문제인 이유
+
+브라우저의 메인 스레드는 **JS 실행, DOM 업데이트, 이벤트 처리, 레이아웃 계산, 페인트**를 전부 담당한다. 메인 스레드가 블로킹되면 이 모든 것이 멈춘다.
+
+```
+메인 스레드가 하는 일:
+┌──────────┬──────────┬──────────┬──────────┬──────────┐
+│ JS 실행  │ 스타일   │ 레이아웃 │ 페인트   │ 이벤트   │
+│          │ 계산     │          │          │ 처리     │
+└──────────┴──────────┴──────────┴──────────┴──────────┘
+    ↑ 여기서 5초짜리 동기 코드가 돌면 → 나머지 전부 멈춤
+```
+
+### Web Worker — 메인 스레드 블로킹의 해결책
+
+무거운 연산을 메인 스레드에서 돌리면 UI가 멈추지만, **Web Worker**를 쓰면 별도 스레드에서 실행할 수 있다.
+
+```js
+// main.js — 메인 스레드
+const worker = new Worker("heavy-task.js");
+worker.postMessage({ data: largeArray });
+worker.onmessage = (e) => {
+  console.log("결과:", e.data); // UI는 안 멈추고 결과를 받음
+};
+
+// heavy-task.js — Worker 스레드
+self.onmessage = (e) => {
+  const result = expensiveCalculation(e.data);
+  self.postMessage(result);
+};
+```
+
+| | 메인 스레드 | Web Worker |
+|---|---|---|
+| **DOM 접근** | 가능 | 불가 |
+| **UI 블로킹** | 있음 | 없음 |
+| **통신 방식** | - | `postMessage` / `onmessage` |
+| **용도** | 일반 로직, DOM 조작 | 무거운 계산, 데이터 파싱, 이미지 처리 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 10만 행짜리 CSV 파일을 프론트에서 파싱하는 기능을 만들었는데, 파싱 중에 UI가 5초 넘게 굳어서 사용자가 "앱이 멈췄다"고 신고. 원인은 `JSON.parse()` + 데이터 변환이 메인 스레드에서 동기적으로 돌아가면서 블로킹된 것. Web Worker로 파싱 로직을 옮기고, 진행률을 `postMessage`로 메인 스레드에 전달하는 방식으로 해결.
 
 ### 자주 하는 오해
 
-- 동기면 무조건 블로킹이고 비동기면 무조건 논블로킹이다 → 단순화가 심하다
-- async 함수는 자동으로 논블로킹이다 → 문법만 보고 그렇게 말하면 부정확하다. async 함수 안에서 무거운 동기 연산을 하면 첫 번째 await 전까지는 블로킹이다
-- 네트워크 요청은 비동기니까 UI가 절대 안 멈춘다 → 틀림. 메인 스레드를 다른 코드가 막고 있으면 UI는 충분히 멈출 수 있다
-
-### 실무 연결
-
-브라우저에서 가장 중요한 건 메인 스레드를 막느냐다.
-긴 계산, 무거운 JSON 파싱, 큰 리스트 렌더링, 비싼 애니메이션 계산이 있으면 사용자는 버튼도 못 누르고 스크롤도 버벅이는 체감을 하게 된다.
-
-즉 브라우저 관점에서 블로킹은 단순 CS 개념이 아니라 사용자 경험 문제다.
-
-> 이제 실행 흐름과 제어권 반환을 구분했다. 그 다음엔 브라우저와 JS 엔진이 실제로 이걸 어떻게 처리하는지, 즉 이벤트 루프로 넘어간다.
+- 동기면 무조건 블로킹이고 비동기면 무조건 논블로킹이다 → **단순화가 심하다.** 두 축은 독립적이다.
+- async 함수는 자동으로 논블로킹이다 → **부정확.** async 함수 안에서 무거운 동기 연산을 하면 첫 번째 await 전까지는 블로킹이다.
+- 네트워크 요청은 비동기니까 UI가 절대 안 멈춘다 → **틀림.** 메인 스레드를 다른 코드가 막고 있으면 UI는 충분히 멈출 수 있다.
 
 ### 면접 압축 답변
 
-동기/비동기는 작업 흐름의 설계 방식이고, 블로킹/논블로킹은 호출 후 제어권이 언제 돌아오는지에 대한 개념입니다. 둘은 관련 있지만 완전히 같은 축은 아닙니다.
+- **10초**: 동기/비동기는 작업 흐름의 설계 방식이고, 블로킹/논블로킹은 호출 후 제어권이 언제 돌아오는지에 대한 개념입니다. 둘은 관련 있지만 같은 축이 아닙니다.
+- **30초**: 동기/비동기는 "결과를 바로 받느냐, 나중에 받느냐"이고, 블로킹/논블로킹은 "그 사이에 다른 일을 할 수 있느냐"입니다. 브라우저 메인 스레드가 블로킹되면 JS, DOM, 이벤트, 페인트가 전부 멈추므로, 무거운 동기 연산은 Web Worker로 분리하는 것이 실무 해결책입니다.
+
+> 이제 실행 흐름과 제어권 반환을 구분했다. 그 다음엔 브라우저와 JS 엔진이 실제로 이걸 어떻게 처리하는지, 즉 이벤트 루프로 넘어간다.
 
 ---
 
 ## 23. 이벤트 루프는 왜 자바스크립트 비동기 이해의 중심인가
 
-자바스크립트는 보통 단일 스레드 실행 모델로 설명된다.
-그런데 실제 브라우저에서는 타이머도 되고, 네트워크 요청도 되고, 클릭 이벤트도 처리되고, Promise도 순서 있게 동작한다.
+> **TL;DR** — 이벤트 루프는 Call Stack, Web APIs, Task Queue, Microtask Queue를 조율해서 비동기 실행 순서를 결정하는 구조다. 핵심 규칙: **매 Task 사이에 Microtask Queue 전체가 비워진다.**
 
-이걸 연결해주는 개념이 이벤트 루프다.
+자바스크립트는 단일 스레드 실행 모델이다. 그런데 실제 브라우저에서는 타이머, 네트워크, 클릭 이벤트, Promise가 순서 있게 동작한다. 이걸 연결해주는 개념이 **이벤트 루프**다.
 
-### 핵심 개념
-
-이벤트 루프를 이해할 때는 아래 4개를 같이 봐야 한다.
-
-- **Call Stack** — 현재 실행 중인 함수가 쌓이는 곳
-- **Web APIs** — setTimeout, fetch, DOM 이벤트 등 브라우저가 별도로 처리하는 영역
-- **Task Queue (Macrotask Queue)** — setTimeout, setInterval, I/O 콜백 등이 대기하는 큐
-- **Microtask Queue** — Promise.then, queueMicrotask, MutationObserver 콜백이 대기하는 큐
-
-### 동작 흐름
-
-1. 현재 실행 중인 코드가 Call Stack에서 실행된다.
-2. setTimeout, DOM 이벤트, 네트워크 콜백 같은 작업은 브라우저가 따로 관리한다.
-3. 준비가 끝난 콜백은 Queue로 들어간다.
-4. Call Stack이 비면 이벤트 루프가 **Microtask Queue를 전부 비운 뒤**, Task Queue에서 하나를 꺼내 Stack에 넣는다.
-5. 이 사이클이 반복된다.
-
-핵심 규칙: **매 Task 사이에 Microtask Queue 전체가 비워진다.** 그래서 Promise.then이 setTimeout보다 먼저 실행된다.
-
-### 왜 이게 중요한가
-
-이걸 이해하면 아래 질문이 한 번에 연결된다.
-
-- 왜 setTimeout(..., 0)이 바로 실행되지 않나
-- 왜 Promise then이 타이머보다 먼저 실행되나
-- 왜 무한 마이크로태스크가 UI를 굳게 만들 수 있나
-- React 업데이트 타이밍을 왜 “즉시 값 변경”으로 이해하면 안 되나
-
-### 예시
-
-```ts
-console.log(“1”);
-
-setTimeout(() => {
-  console.log(“2”);
-}, 0);
-
-Promise.resolve().then(() => {
-  console.log(“3”);
-});
-
-console.log(“4”);
-```
-
-실행 결과:
+### 이벤트 루프 구조
 
 ```
-1
-4
-3
-2
+┌─────────────────────────────────────────────────────────┐
+│                    브라우저 환경                          │
+│                                                         │
+│  ┌──────────────┐     ┌──────────────────────┐          │
+│  │  Call Stack   │     │     Web APIs         │          │
+│  │              │     │  setTimeout          │          │
+│  │  현재 실행 중  │────▶│  fetch               │          │
+│  │  인 함수들    │     │  DOM events          │          │
+│  │              │     │  requestAnimationFrame│          │
+│  └──────┬───────┘     └──────────┬───────────┘          │
+│         │                        │                       │
+│         │    ┌───────────────────┼───────────────┐       │
+│         │    │                   ▼               │       │
+│         │    │  ┌─────────────────────────────┐  │       │
+│         │    │  │   Microtask Queue           │  │       │
+│         │    │  │   Promise.then              │  │       │
+│         │    │  │   queueMicrotask            │  │       │
+│         │    │  │   MutationObserver          │  │       │
+│         │    │  └─────────────────────────────┘  │       │
+│         │    │                                   │       │
+│         │    │  ┌─────────────────────────────┐  │       │
+│   Stack │◀───┤  │   Task Queue (Macrotask)    │  │       │
+│   비면  │    │  │   setTimeout / setInterval  │  │       │
+│   꺼냄  │    │  │   I/O callbacks             │  │       │
+│         │    │  │   UI rendering              │  │       │
+│         │    │  └─────────────────────────────┘  │       │
+│         │    └───────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────┘
 ```
 
-이유:
+### 이벤트 루프 사이클
 
-- 1, 4는 현재 Call Stack에서 즉시 실행
-- Promise then은 Microtask Queue에 등록
-- setTimeout 콜백은 Task Queue에 등록
-- Stack이 비면 Microtask가 먼저 **전부** 비워지고, 그 다음 Task가 실행되기 때문이다
+```
+1. Call Stack에서 현재 코드 실행
+2. Stack이 비면 → Microtask Queue 전부 비움
+3. (필요 시) 렌더링 기회 — requestAnimationFrame, Style, Layout, Paint
+4. Task Queue에서 하나 꺼내서 Stack에 넣음
+5. 1번으로 돌아감
+```
 
-### 심화 예시: Microtask가 Microtask를 만들면
+핵심 규칙: **Microtask가 항상 먼저, Task는 한 번에 하나씩.** 그리고 렌더링은 Microtask 이후, 다음 Task 이전에 일어날 수 있다.
 
-```ts
+### 실행 순서 예시
+
+```js
+console.log("1");                          // 동기 — 즉시 실행
+
+setTimeout(() => console.log("2"), 0);     // Task Queue에 등록
+
+Promise.resolve().then(() => console.log("3")); // Microtask Queue에 등록
+
+console.log("4");                          // 동기 — 즉시 실행
+```
+
+```
+실행 순서:
+1  ← 동기
+4  ← 동기
+3  ← Microtask (Stack이 비자마자 전부 처리)
+2  ← Task (Microtask 다 비운 뒤)
+```
+
+### Microtask가 Microtask를 만들면
+
+```js
 Promise.resolve().then(() => {
   console.log("micro 1");
   Promise.resolve().then(() => {
@@ -214,150 +273,158 @@ Promise.resolve().then(() => {
   });
 });
 
-setTimeout(() => {
-  console.log("macro");
-}, 0);
+setTimeout(() => console.log("macro"), 0);
 ```
 
 출력: `micro 1` → `micro 2` → `macro`
 
-Microtask 안에서 새 Microtask를 등록하면 그것도 같은 사이클에서 처리된다. 이게 무한히 반복되면 Task Queue는 영원히 실행되지 않고, UI도 멈춘다.
+Microtask 안에서 새 Microtask를 등록하면 **같은 사이클에서 처리**된다. 이게 무한히 반복되면 Task Queue는 영원히 실행되지 않고, **렌더링도 멈추고, UI도 굳는다.**
+
+### requestAnimationFrame의 위치
+
+```
+Task 실행 → Microtask 전부 비움 → rAF 콜백 실행 → Style/Layout/Paint → 다음 Task
+```
+
+| 콜백 종류 | 큐 | 타이밍 |
+|---|---|---|
+| `Promise.then` | Microtask | 현재 Task 직후, 렌더링 전 |
+| `requestAnimationFrame` | rAF Queue | Microtask 이후, 페인트 직전 |
+| `setTimeout` | Task Queue | 다음 이벤트 루프 사이클 |
+
+`requestAnimationFrame`은 **다음 페인트 직전**에 실행되므로, 애니메이션이나 DOM 측정에 가장 적합하다.
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> "로딩 스피너가 안 보여요" 버그. `setLoading(true)` 직후에 무거운 동기 연산을 하면, React가 렌더링할 기회(페인트)가 없어서 스피너가 화면에 안 나타난 채 연산이 끝난다. `setTimeout(() => heavyWork(), 0)`으로 한 Task 양보하거나, `requestAnimationFrame` 후에 작업을 시작하면 스피너가 먼저 보인 뒤 연산이 시작된다.
 
 ### 자주 하는 오해
 
-- setTimeout(..., 0)은 즉시 실행된다 → 틀림. 최소 지연 시간이 있고, 무엇보다 Task Queue를 거치기 때문에 현재 스택과 모든 Microtask가 끝난 뒤에야 실행된다
-- Promise는 그냥 더 빠른 타이머다 → 틀림. Promise.then은 Microtask이고 setTimeout은 Task다. 같은 큐가 아니다
-- 이벤트 루프는 JS 엔진 내부에서만 전부 처리한다 → 브라우저(또는 Node.js 런타임)와의 협력이 핵심이다
-
-### 실무 연결
-
-이벤트 루프 감각이 있으면:
-
-- 로딩 표시가 왜 늦게 바뀌는지
-- Promise 체인이 왜 예상과 다르게 먼저 실행되는지
-- 무거운 동기 코드가 왜 비동기 콜백도 못 돌게 만드는지
-
-설명할 수 있다.
-
-> 이제 실행 순서의 기반을 봤다. 그 다음엔 브라우저 비동기를 더 다루기 쉽게 만든 추상화인 Promise로 넘어간다.
+- `setTimeout(..., 0)`은 즉시 실행된다 → **틀림.** Task Queue를 거치므로 현재 Stack과 모든 Microtask가 끝난 뒤 실행된다.
+- Promise는 그냥 더 빠른 타이머다 → **틀림.** Microtask이고 setTimeout은 Task다. 같은 큐가 아니다.
+- 이벤트 루프는 JS 엔진 내부에서만 전부 처리한다 → **틀림.** 브라우저(또는 Node.js 런타임)와의 협력이 핵심이다.
+- `requestAnimationFrame`은 Task다 → **틀림.** 별도 큐이며, 페인트 직전에 실행된다.
 
 ### 면접 압축 답변
 
-이벤트 루프는 Call Stack, 브라우저 비동기 처리, Task Queue, Microtask Queue를 조율해 자바스크립트 비동기 실행 순서를 결정하는 구조입니다. 핵심 규칙은 매 Task 사이에 Microtask Queue 전체가 비워진다는 것이며, 이 때문에 Promise.then이 setTimeout보다 먼저 실행됩니다.
+- **10초**: 이벤트 루프는 Call Stack이 비면 Microtask Queue를 전부 비우고, 렌더링 기회를 준 뒤, Task Queue에서 하나를 꺼내 실행하는 사이클입니다. 그래서 Promise.then이 setTimeout보다 먼저 실행됩니다.
+- **30초**: 이벤트 루프는 Call Stack, Web APIs, Microtask Queue, Task Queue를 조율합니다. Stack이 비면 Microtask를 전부 처리하고, 렌더링이 필요하면 requestAnimationFrame → Style → Layout → Paint를 수행한 뒤, Task를 하나 꺼내 실행합니다. Microtask 안에서 새 Microtask를 계속 만들면 렌더링과 Task가 지연되므로 주의해야 합니다.
+
+> 이제 실행 순서의 기반을 봤다. 그 다음엔 브라우저 비동기를 더 다루기 쉽게 만든 추상화인 Promise로 넘어간다.
 
 ---
 
 ## 24. Promise는 왜 필요한가
 
-이벤트 루프를 알았다면 이제 다음 질문은 자연스럽다.
-
-“그럼 비동기 작업을 그냥 콜백으로만 다루면 안 되나?”
-
-초기 자바스크립트는 콜백 중심이었다.
-그런데 콜백만으로 비동기를 관리하면 읽기 어렵고, 에러 흐름이 분산되고, 여러 비동기 조합이 복잡해진다.
-Promise는 이 문제를 줄이기 위해 등장한 추상화다.
+> **TL;DR** — Promise는 미래에 완료될 값을 나타내는 객체다. 콜백 중첩 문제를 해결하고, 성공/실패 흐름을 구조화하며, 체이닝으로 평탄하게 비동기를 조합할 수 있게 한다.
 
 ### 핵심 개념
 
-Promise는 미래에 완료될 값을 나타내는 객체다.
-상태는 세 가지이며, 한 번 결정되면 바뀌지 않는다(settled).
+Promise는 미래에 완료될 값을 나타내는 객체다. 상태는 세 가지이며, 한 번 결정되면 바뀌지 않는다(settled).
 
-- **pending** — 아직 결과가 나오지 않음
-- **fulfilled** — 성공적으로 완료됨
-- **rejected** — 실패함
+| 상태 | 의미 | 전환 |
+|---|---|---|
+| **pending** | 아직 결과가 나오지 않음 | 초기 상태 |
+| **fulfilled** | 성공적으로 완료됨 | `resolve(value)` 호출 시 |
+| **rejected** | 실패함 | `reject(reason)` 호출 시 |
 
-### 왜 이게 중요한가
+```
+pending ──resolve()──▶ fulfilled
+   │
+   └──reject()───▶ rejected
 
-Promise가 중요한 이유는 단순히 문법이 예뻐서가 아니다.
-
-- 성공/실패 흐름을 구조화할 수 있고
-- 체이닝이 가능하며
-- 에러 전파 방식이 일관되고
-- 여러 비동기를 조합하기 쉬워진다
-
-### 콜백과 비교해서 이해하기
-
-콜백 기반 코드는 중첩이 깊어지기 쉽다.
-
-```ts
-getUser(userId, (user) => {
-  getPosts(user.id, (posts) => {
-    getComments(posts[0].id, (comments) => {
-      console.log(comments);
-    });
-  });
-});
+※ fulfilled/rejected로 가면 다시 돌아올 수 없다 (immutable)
 ```
 
-Promise를 쓰면 흐름을 더 평평하게 정리할 수 있다.
+### 체이닝과 값 전파 규칙
 
-```ts
-getUser(userId)
-  .then((user) => getPosts(user.id))
-  .then((posts) => getComments(posts[0].id))
-  .then((comments) => {
-    console.log(comments);
+Promise 체이닝에서 값이 어떻게 전달되는지 정확히 알아야 한다.
+
+```js
+fetchUser(userId)
+  .then((user) => {
+    console.log(user);
+    return fetchPosts(user.id);  // Promise를 반환 → 다음 then은 이걸 기다림
+  })
+  .then((posts) => {
+    console.log(posts);
+    return posts.length;          // 일반 값을 반환 → 다음 then에 그대로 전달
+  })
+  .then((count) => {
+    console.log(count);           // posts.length 값을 받음
   })
   .catch((error) => {
-    console.error(error);
+    console.error(error);         // 위 어디서든 에러가 나면 여기로
   })
   .finally(() => {
-    // 성공이든 실패든 항상 실행된다
-    // 로딩 상태 해제 같은 정리 작업에 유용하다
-    setLoading(false);
+    setLoading(false);            // 성공이든 실패든 항상 실행
   });
 ```
+
+| then에서 반환하는 것 | 다음 then이 받는 것 |
+|---|---|
+| 일반 값 (`return 42`) | 그 값 자체 (`42`) |
+| Promise (`return fetch(...)`) | 그 Promise의 resolved 값 |
+| 아무것도 안 반환 | `undefined` |
+| throw | catch로 이동 |
+
+### 정적 메서드
+
+```js
+// 즉시 fulfilled Promise 생성
+const resolved = Promise.resolve(42);
+resolved.then((v) => console.log(v)); // 42
+
+// 즉시 rejected Promise 생성
+const rejected = Promise.reject(new Error("fail"));
+rejected.catch((e) => console.log(e.message)); // "fail"
+
+// 값이 이미 있지만 Promise 인터페이스로 통일하고 싶을 때 유용
+function getUser(id) {
+  if (cache.has(id)) return Promise.resolve(cache.get(id));
+  return fetch(`/api/users/${id}`).then((r) => r.json());
+}
+```
+
+### 체이닝 vs 분기 — 혼동하기 쉬운 차이
+
+```js
+// 체이닝: 순차 실행
+promise.then(A).then(B);
+// A가 끝난 뒤 B 실행
+
+// 분기: 독립 실행
+promise.then(A);
+promise.then(B);
+// A와 B가 같은 promise 결과를 받아 독립적으로 실행
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> API 응답을 받아서 데이터 가공 → 저장 → UI 반영까지 3단계를 콜백으로 작성했는데, 에러가 2단계에서 발생하면 3단계 에러 핸들러에선 잡히지 않아서 에러가 조용히 무시되는 버그. Promise 체이닝으로 바꾸니 `.catch()` 하나로 전체 파이프라인의 에러를 잡을 수 있었다.
 
 ### 자주 하는 오해
 
-- Promise를 만들면 즉시 실행되지 않는다 → 틀림. executor 함수(`new Promise((resolve, reject) => { ... })` 안의 코드)는 생성 시점에 **동기적으로** 즉시 실행된다
-- Promise는 비동기를 만든다 → Promise는 비동기 결과를 다루는 인터페이스이지, 비동기 작업 자체를 “자동 생성”하는 마법은 아니다
-- then을 여러 번 붙이면 무조건 순차 실행이다 → 같은 Promise에 then을 여러 개 붙이면 독립적으로 실행된다. 체이닝(`.then().then()`)과 분기(`.then(); .then()`)는 다르다
-
-### 실무 연결
-
-Promise를 제대로 이해하면:
-
-- API 요청 체인
-- 순차/병렬 요청
-- 에러 전파
-- 재시도 로직
-- 로딩 상태 관리
-
-를 훨씬 더 정확하게 설계할 수 있다.
-
-> Promise를 알았다면, 이제 많은 사람이 더 자주 쓰는 문법인 async/await가 Promise와 어떤 관계인지를 봐야 한다.
+- Promise를 만들면 즉시 실행되지 않는다 → **틀림.** executor 함수(`new Promise((resolve, reject) => { ... })` 안의 코드)는 생성 시점에 **동기적으로** 즉시 실행된다.
+- Promise는 비동기를 만든다 → **틀림.** Promise는 비동기 결과를 다루는 인터페이스이지, 비동기 작업 자체를 생성하는 마법은 아니다.
+- then을 여러 번 붙이면 무조건 순차 실행이다 → **체이닝과 분기를 구분**해야 한다.
 
 ### 면접 압축 답변
 
-Promise는 미래에 완료될 값을 나타내는 객체로, 비동기 작업의 성공과 실패 흐름을 구조적으로 다루기 위한 추상화입니다. 상태는 pending, fulfilled, rejected 세 가지이며 한 번 결정되면 변하지 않습니다. 콜백보다 체이닝과 에러 전파가 일관돼서 복잡한 비동기 흐름을 다루기 쉬워집니다.
+- **10초**: Promise는 미래에 완료될 값을 나타내는 객체로, pending/fulfilled/rejected 상태를 가지며 한 번 결정되면 변하지 않습니다.
+- **30초**: Promise는 비동기 작업의 성공과 실패 흐름을 구조적으로 다루기 위한 추상화입니다. then에서 값을 반환하면 다음 then으로 전달되고, Promise를 반환하면 그걸 기다립니다. catch 하나로 파이프라인 전체의 에러를 잡을 수 있고, finally로 정리 작업을 보장합니다.
+
+> Promise를 알았다면, 이제 많은 사람이 더 자주 쓰는 문법인 async/await가 Promise와 어떤 관계인지를 봐야 한다.
 
 ---
 
 ## 25. async/await는 Promise와 어떤 관계인가
 
-많은 사람이 async/await를 Promise와 별개의 기술처럼 느낀다.
-하지만 실제로는 Promise 위에서 더 읽기 쉬운 문법을 제공하는 **syntactic sugar**다.
+> **TL;DR** — async/await는 Promise 위에서 더 읽기 쉬운 문법을 제공하는 syntactic sugar다. async 함수는 항상 Promise를 반환하고, await는 해당 함수의 흐름만 양보할 뿐 이벤트 루프는 계속 돌아간다.
 
 ### 핵심 개념
 
-- async 함수는 항상 Promise를 반환한다
-- await는 Promise가 해결될 때까지 해당 함수 내부 흐름을 일시 중단한 것처럼 보이게 만든다
-- 하지만 이것이 전체 자바스크립트 실행을 멈추는 것은 아니다. await 지점에서 함수가 **양보(yield)**하고, 나머지 코드는 이벤트 루프를 통해 계속 돌아간다
-
-### 왜 이게 중요한가
-
-이걸 이해해야:
-
-- await를 쓸 수 있는 위치
-- 병렬 요청과 순차 요청 차이
-- try/catch로 Promise 에러를 잡는 방식
-
-을 정확히 설명할 수 있다.
-
-### 예시
-
-```ts
+```js
 async function fetchData() {
   const response = await fetch("/api/data");
   const data = await response.json();
@@ -373,114 +440,139 @@ function fetchData() {
 
 겉보기엔 동기 코드처럼 읽히지만, 내부적으로는 Promise 흐름 위에서 동작한다.
 
-### 에러 처리
+### await의 동작 원리
 
-```ts
+```js
+async function example() {
+  console.log("A");          // 동기 — 즉시 실행
+  const result = await fetch("/api");  // 여기서 함수가 양보(yield)
+  console.log("B");          // fetch가 완료된 후 Microtask로 재개
+}
+
+example();
+console.log("C");
+
+// 출력: A → C → B
+// await 지점에서 example 함수가 양보하고, "C"가 먼저 실행된다
+```
+
+### 에러 처리 — try/catch vs .catch()
+
+```js
+// async/await: try/catch로 동기 코드처럼 에러를 잡음
 async function fetchData() {
   try {
     const response = await fetch("/api/data");
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
   } catch (error) {
     console.error("요청 실패:", error);
     throw error; // 상위로 전파하려면 다시 throw
   }
 }
+
+// 주의: try/catch 블록 바깥의 에러는 잡히지 않는다
+async function dangerous() {
+  const data = await fetchData(); // fetchData 내부 에러는 여기서 throw됨
+  processData(data);               // 이 함수의 에러도 잡으려면 try/catch로 감싸야
+}
 ```
 
-try/catch로 Promise rejection을 잡을 수 있다는 점이 async/await의 큰 장점이다.
+### 순차 vs 병렬 — await의 함정
+
+```js
+// 순차 실행: fetchUser가 끝나야 fetchPosts가 시작
+const user = await fetchUser();     // 2초
+const posts = await fetchPosts();   // 3초
+// 총 5초
+
+// 병렬 실행: 두 요청이 동시에 시작
+const [user, posts] = await Promise.all([
+  fetchUser(),    // 2초
+  fetchPosts(),   // 3초
+]);
+// 총 3초 (둘 중 더 오래 걸리는 시간)
+```
+
+| | 순차 (`await` 연속) | 병렬 (`Promise.all`) |
+|---|---|---|
+| **총 시간** | 각 요청 시간의 합 | 가장 오래 걸리는 요청 시간 |
+| **적합한 경우** | B가 A의 결과에 의존할 때 | 서로 독립적인 요청 |
+| **에러 처리** | try/catch로 순차 처리 | 하나 실패 시 전체 실패 (all) |
+
+### for await...of — 비동기 이터레이터
+
+스트림이나 SSE(Server-Sent Events) 처리에서 실무적으로 쓰이는 패턴:
+
+```js
+// 비동기 이터레이터 — 데이터가 청크 단위로 도착할 때
+async function processStream(stream) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    console.log(decoder.decode(value));
+  }
+}
+
+// SSE 처리 예시
+async function* streamEvents(url) {
+  const response = await fetch(url);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    yield decoder.decode(value);
+  }
+}
+
+for await (const chunk of streamEvents("/api/stream")) {
+  processChunk(chunk);
+}
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 대시보드 로딩 시 유저 정보, 알림, 통계 3개 API를 순차적으로 `await` 해서 초기 로딩이 6초나 걸린다는 피드백. 3개 요청이 서로 독립적이라 `Promise.all`로 병렬화하니 2초로 줄어들었다. 단, 하나라도 실패하면 전체 로딩이 실패하는 문제가 생겨서, 핵심 데이터(유저)는 `await`로 먼저 로드하고 부가 데이터(알림, 통계)는 `Promise.allSettled`로 처리하는 하이브리드 전략으로 변경.
 
 ### 자주 하는 오해
 
-- await를 쓰면 비동기가 동기로 바뀐다 → 틀림. 해당 함수 내부의 실행 흐름만 멈추는 것처럼 보일 뿐, 이벤트 루프는 계속 돌고 있다
-- await는 어디서나 쓸 수 있다 → 기본적으로 async 함수 안에서만 가능하다. ES 모듈의 최상위 레벨(top-level await)에서도 가능하지만, 일반 스크립트나 CommonJS에서는 안 된다
-- await를 많이 쓰면 무조건 코드가 더 좋다 → 병렬로 처리할 수 있는 작업까지 순차로 묶으면 오히려 느려질 수 있다
-
-### 병렬과 순차를 구분해야 하는 이유
-
-```ts
-// 순차 실행: fetchUser가 끝나야 fetchPosts가 시작된다
-const user = await fetchUser();
-const posts = await fetchPosts();
-// 총 시간 = fetchUser 시간 + fetchPosts 시간
-```
-
-두 요청이 서로 독립적이면 병렬이 더 적절하다.
-
-```ts
-// 병렬 실행: 두 요청이 동시에 시작된다
-const [user, posts] = await Promise.all([fetchUser(), fetchPosts()]);
-// 총 시간 = 둘 중 더 오래 걸리는 시간
-```
-
-### 실무 연결
-
-프론트엔드에서 async/await를 많이 쓰지만,
-무조건 await를 줄줄이 쓰면:
-
-- 독립 요청이 불필요하게 순차 실행되고
-- 로딩 시간이 길어지고
-- 사용자 체감이 나빠질 수 있다
-
-> 그렇다면 여러 Promise를 한꺼번에 다룰 때는 어떤 조합 도구를 써야 하나?
+- await를 쓰면 비동기가 동기로 바뀐다 → **틀림.** 해당 함수 내부의 실행 흐름만 멈추는 것처럼 보일 뿐, 이벤트 루프는 계속 돌고 있다.
+- await는 어디서나 쓸 수 있다 → **기본적으로 async 함수 안에서만.** ES 모듈의 최상위 레벨(top-level await)에서도 가능하지만, CommonJS에서는 안 된다.
+- await를 많이 쓰면 무조건 코드가 더 좋다 → **틀림.** 병렬로 처리할 수 있는 작업까지 순차로 묶으면 오히려 느려진다.
 
 ### 면접 압축 답변
 
-async/await는 Promise를 더 읽기 쉽게 다루는 문법적 설탕입니다. async 함수는 항상 Promise를 반환하고, await는 해당 함수 내부에서 Promise 결과를 기다리는 것처럼 보이게 하지만, 실제로는 그 지점에서 실행을 양보하고 이벤트 루프가 계속 동작합니다.
+- **10초**: async/await는 Promise를 더 읽기 쉽게 다루는 문법적 설탕입니다. async 함수는 항상 Promise를 반환하고, await는 해당 함수 내부에서 Promise 결과를 기다리는 것처럼 보이게 합니다.
+- **30초**: async/await는 Promise 위의 syntactic sugar입니다. await 지점에서 해당 함수가 양보하고 이벤트 루프는 계속 동작합니다. 독립적인 요청은 `Promise.all`로 병렬화해야 하고, try/catch로 에러를 잡을 수 있지만 블록 범위를 주의해야 합니다. 스트림 처리에는 `for await...of`를 쓸 수 있습니다.
+
+> 그렇다면 여러 Promise를 한꺼번에 다룰 때는 어떤 조합 도구를 써야 하나?
 
 ---
 
 ## 26. Promise.all, allSettled, race, any는 어떻게 구분하나
 
-비동기를 실무에서 다루다 보면 “여러 요청을 어떻게 조합할 것인가”가 중요해진다.
-이때 Promise 조합 함수를 목적에 맞게 구분해야 한다.
+> **TL;DR** — 4가지 조합 함수는 "전부 성공해야 하는가", "부분 실패를 허용하는가", "가장 빠른 걸 쓸 것인가"에 따라 구분한다.
 
-### 핵심 개념
+### 비교 테이블
 
-**Promise.all**
+| | `Promise.all` | `Promise.allSettled` | `Promise.race` | `Promise.any` |
+|---|---|---|---|---|
+| **성공 조건** | 전부 성공 | 전부 완료 (성공/실패 무관) | 가장 먼저 settled | 가장 먼저 성공 |
+| **실패 조건** | 하나라도 실패 → 즉시 실패 | 실패 없음 (항상 fulfilled) | 가장 먼저 실패한 게 먼저면 실패 | 전부 실패 → AggregateError |
+| **반환 형태** | `[결과, 결과, ...]` | `[{status, value/reason}, ...]` | 단일 값 | 단일 값 |
+| **대표 용도** | 전부 있어야 화면을 구성할 때 | 부분 실패 허용 대시보드 | timeout 경쟁 | CDN 미러 중 가장 빠른 것 |
 
-- 모든 Promise가 성공해야 성공
-- 하나라도 실패하면 **즉시** 전체 실패 (나머지 Promise는 취소되지 않고 무시된다)
-- 모두 성공해야 의미가 있는 작업에 적합
+### 사용 예시
 
-**Promise.allSettled**
-
-- 전부 끝날 때까지 기다림
-- 성공/실패를 각각 `{ status, value }` 또는 `{ status, reason }` 형태의 결과로 받음
-- 부분 성공/부분 실패를 같이 보고 싶을 때 적합
-
-**Promise.race**
-
-- 가장 먼저 끝난 Promise의 결과로 결정
-- 성공이든 실패든 가장 먼저 끝난 쪽이 이김
-- timeout 경쟁 등에 활용 가능
-
-**Promise.any**
-
-- 가장 먼저 성공한 Promise로 결정
-- 모두 실패하면 AggregateError로 실패
-- 여러 후보 중 하나만 성공하면 되는 경우에 적합
-
-### 왜 이게 중요한가
-
-이걸 구분 못 하면:
-
-- 하나만 실패해도 전체가 깨질지
-- 부분 성공을 살릴지
-- timeout 처리에 무엇을 써야 할지
-
-판단하기 어렵다.
-
-### 예시
-
-```ts
-// all: 둘 다 있어야 화면을 완성할 수 있을 때
+```js
+// all: 유저 + 게시글 둘 다 있어야 화면을 완성할 수 있을 때
 const [user, posts] = await Promise.all([fetchUser(), fetchPosts()]);
-```
 
-```ts
 // allSettled: 배너 하나 실패해도 공지와 추천은 보여주고 싶을 때
 const results = await Promise.allSettled([
   fetchBanner(),
@@ -495,9 +587,7 @@ results.forEach((result) => {
     console.warn("부분 실패:", result.reason);
   }
 });
-```
 
-```ts
 // race: timeout 경쟁 패턴
 const result = await Promise.race([
   fetch("/api/data"),
@@ -505,57 +595,70 @@ const result = await Promise.race([
     setTimeout(() => reject(new Error("timeout")), 5000)
   ),
 ]);
+
+// any: 여러 CDN 중 가장 빠른 응답 사용
+const fastest = await Promise.any([
+  fetch("https://cdn1.example.com/data"),
+  fetch("https://cdn2.example.com/data"),
+  fetch("https://cdn3.example.com/data"),
+]);
 ```
+
+### 실무에서의 선택 기준
+
+```
+화면 구성에 전부 필요한가?
+  ├── YES → Promise.all (하나라도 없으면 에러 화면)
+  └── NO → 부분 실패를 허용할 수 있나?
+        ├── YES → Promise.allSettled (실패한 건 fallback UI)
+        └── 가장 빠른 응답을 쓸 건가?
+              ├── 성공만 → Promise.any
+              └── 성공이든 실패든 → Promise.race
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 대시보드에 매출 차트, 유저 통계, 알림 목록 3개를 `Promise.all`로 불러오는데, 알림 서버가 간헐적으로 503을 내면 대시보드 전체가 에러 화면으로 바뀌는 문제. 핵심 데이터(매출, 유저)는 `Promise.all`로 묶고, 부가 데이터(알림)는 별도 `try/catch`로 분리해서 실패하면 "알림을 불러올 수 없습니다" UI만 보여주도록 변경. 또는 전부 `Promise.allSettled`로 바꾸고 결과별로 렌더링 분기.
 
 ### 자주 하는 오해
 
-- Promise.all이 항상 제일 좋은 기본값이다 → 틀림. 부분 실패를 허용해야 하는 UI에서는 allSettled가 더 적절하다
-- race는 가장 먼저 성공한 걸 고른다 → 정확히는 가장 먼저 **settled(성공 또는 실패)**된 것이다. 실패가 먼저 오면 전체가 실패한다
-- allSettled는 실패를 숨긴다 → 틀림. 실패를 포함해서 결과를 돌려준다. 숨기는 게 아니라 판단을 개발자에게 맡긴다
-
-### 실무 연결
-
-실제 서비스에서는:
-
-- 핵심 데이터는 all
-- 부가 위젯은 allSettled
-- timeout 제어는 race
-
-처럼 역할을 나누는 경우가 많다.
-
-> 여기까지는 문법 조합이다. 그런데 실제 서비스에서는 여러 요청이 겹칠 때 응답 순서 때문에 버그가 생길 수 있다. 그게 race condition이다.
+- Promise.all이 항상 제일 좋은 기본값이다 → **틀림.** 부분 실패를 허용해야 하는 UI에서는 allSettled가 더 적절하다.
+- race는 가장 먼저 성공한 걸 고른다 → **정확히는 가장 먼저 settled(성공 또는 실패)된 것이다.** 실패가 먼저 오면 전체가 실패한다.
+- allSettled는 실패를 숨긴다 → **틀림.** 실패를 포함해서 결과를 돌려준다. 판단을 개발자에게 맡기는 것이다.
 
 ### 면접 압축 답변
 
-Promise.all은 모두 성공해야 성공하고, allSettled는 전부 끝날 때까지 기다린 뒤 각 결과를 모두 돌려줍니다. race는 가장 먼저 끝난 결과로 결정되고, any는 가장 먼저 성공한 결과를 사용합니다. 따라서 요구사항에 따라 조합 방식을 다르게 선택해야 합니다.
+- **10초**: all은 모두 성공해야 하고, allSettled는 전부 끝날 때까지 기다리며, race는 가장 먼저 끝난 것, any는 가장 먼저 성공한 것으로 결정됩니다.
+- **30초**: Promise.all은 모두 성공해야 성공하고 하나라도 실패하면 즉시 실패합니다. allSettled는 전부 끝날 때까지 기다린 뒤 각 결과를 성공/실패로 돌려줍니다. race는 가장 먼저 settled된 결과를 쓰므로 timeout 경쟁에 유용하고, any는 가장 먼저 성공한 결과를 쓰므로 CDN 미러 같은 패턴에 적합합니다.
+
+> 여기까지는 문법 조합이다. 그런데 실제 서비스에서는 여러 요청이 겹칠 때 응답 순서 때문에 버그가 생길 수 있다. 그게 race condition이다.
 
 ---
 
 ## 27. Race Condition은 프론트엔드에서 어떻게 생기나
 
-비동기 문법을 아는 것과, 비동기 버그를 설명할 수 있는 것은 다르다.
-실무 면접에서 강한 답변은 바로 여기서 나온다.
+> **TL;DR** — Race Condition은 여러 비동기 작업의 완료 순서가 보장되지 않아 결과가 엉뚱하게 덮어써지는 문제다. 싱글 스레드인 JS에서도 비동기 **응답 도착 순서**가 보장되지 않으므로 충분히 발생한다.
 
-### 핵심 개념
+### 타임라인으로 보는 Race Condition
 
-Race Condition은 여러 작업이 같은 상태나 자원에 접근할 때, 실행 순서에 따라 결과가 달라지는 문제다.
+```
+시간 →
 
-### 대표적인 프론트엔드 예시
+사용자:    "a" 입력          "ab" 입력
+            │                  │
+요청:       ├── 요청 A ──────────────────── 응답 A 도착 (느림)
+            │                  │
+            │                  ├── 요청 B ───── 응답 B 도착 (빠름)
+            │                  │
+화면:       │                  │    "ab" 결과    "a" 결과로 덮어씀!
+                                    표시됨        ← 이게 race condition
+```
 
-검색 입력창을 생각해보자.
+사용자는 "ab"를 검색했는데, 느린 요청 A의 응답이 나중에 도착하면서 화면을 "a" 결과로 덮어쓴다.
 
-- 사용자가 a를 입력한다
-- 요청 A가 나간다
-- 곧바로 ab를 입력한다
-- 요청 B가 나간다
-- 요청 B가 먼저 도착한다
-- 화면은 ab 결과를 보여준다
-- 그런데 요청 A가 **나중에** 도착해서 화면을 다시 덮어쓴다
+### 문제 코드
 
-이러면 사용자는 마지막 입력이 `ab`였는데 화면엔 `a` 결과가 보일 수 있다.
-
-```ts
-// 이 코드에서 race condition이 발생한다
+```tsx
 function SearchBox() {
   const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState([]);
@@ -571,99 +674,85 @@ function SearchBox() {
 }
 ```
 
-### 왜 이게 중요한가
+### 발생하기 쉬운 곳
 
-이 문제를 모르면:
+| 상황 | 왜 위험한가 |
+|---|---|
+| 검색 자동완성 | 입력이 빠르면 요청이 겹침 |
+| 탭/필터 전환 | 이전 탭의 응답이 현재 탭을 덮음 |
+| 무한 스크롤 페이지 전환 | 이전 페이지 데이터가 현재 페이지에 섞임 |
+| 버튼 중복 클릭 | 같은 요청이 여러 번 발생 |
+| Optimistic update 후 rollback | 서버 응답이 예상과 다른 순서로 도착 |
 
-- “가끔 옛날 데이터가 보여요”
-- “탭 전환하다 보면 값이 바뀌어요”
-- “로딩이 끝났는데 다시 이전 상태가 나와요”
+### 디버깅 사고 과정
 
-같은 버그를 설명할 수 없다.
+Race condition이 의심될 때:
+
+1. **증상 확인** — "가끔 옛날 데이터가 보인다", "새로고침하면 괜찮은데 빠르게 조작하면 문제"
+2. **Network 탭 확인** — 같은 API에 요청이 여러 개 나가고 있는지, 응답 순서가 요청 순서와 다른지 확인
+3. **콘솔 로그로 시점 추적** — `console.log("요청:", keyword, "응답:", data)`를 넣어서 어떤 요청의 응답이 화면에 반영되는지 확인
+4. **의도적으로 느린 응답 시뮬레이션** — DevTools Network 탭에서 특정 요청에 throttle을 걸어서 재현
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 상품 목록에서 카테고리 필터를 빠르게 전환하면, "전자제품" 카테고리를 선택했는데 "의류" 목록이 보이는 버그. QA에서 "가끔 발생"이라고 보고했는데, Network 탭에서 보니 "의류" 요청이 먼저 나갔지만 "전자제품" 요청 응답이 먼저 도착 → "전자제품" 화면 표시 → 뒤늦게 "의류" 응답이 도착해서 화면을 덮어쓰는 패턴이었다.
 
 ### 자주 하는 오해
 
-- race condition은 멀티스레드에서만 생긴다 → 틀림. 프론트엔드 비동기 흐름에서도 충분히 생긴다. 자바스크립트는 싱글 스레드지만 비동기 응답의 **도착 순서**는 보장되지 않기 때문이다
-- 요청은 나중에 보낸 게 항상 나중에 도착한다 → 틀림. 네트워크는 그렇게 보장하지 않는다
-- 최신 state만 보면 자동 해결된다 → 조건에 따라 여전히 오래된 응답이 화면을 덮을 수 있다
-
-### 실무 연결
-
-대표적인 발생 지점:
-
-- 자동완성 검색
-- 탭/필터 전환
-- 무한 스크롤 페이지 전환
-- 버튼 중복 클릭
-- optimistic update 이후 rollback 타이밍 꼬임
-
-> Race Condition을 알았다면 다음 질문은 당연하다. 이전 요청을 취소하거나, 최신 요청만 반영하려면 어떻게 해야 하나?
+- Race condition은 멀티스레드에서만 생긴다 → **틀림.** 싱글 스레드 JS에서도 비동기 응답의 **도착 순서**는 보장되지 않으므로 충분히 생긴다.
+- 요청은 나중에 보낸 게 항상 나중에 도착한다 → **틀림.** 네트워크는 그렇게 보장하지 않는다.
+- 최신 state만 보면 자동 해결된다 → **틀림.** 오래된 응답이 `setResults(data)`를 호출하는 순간 최신 state가 덮어써진다.
 
 ### 면접 압축 답변
 
-Race Condition은 여러 비동기 작업의 완료 순서가 보장되지 않아 결과가 엉뚱하게 덮어써지는 문제입니다. 프론트엔드에서는 검색 자동완성이나 탭 전환처럼 요청이 연속으로 발생하는 UI에서 자주 생기며, 이전 요청 취소나 최신 요청만 반영하는 정책이 필요합니다.
+- **10초**: Race Condition은 여러 비동기 작업의 완료 순서가 보장되지 않아 결과가 엉뚱하게 덮어써지는 문제입니다. 싱글 스레드 JS에서도 응답 도착 순서가 보장되지 않아 발생합니다.
+- **30초**: 프론트엔드에서 검색 자동완성이나 필터 전환처럼 요청이 연속으로 발생하는 UI에서, 느린 응답이 빠른 응답을 덮어쓰는 문제입니다. 디버깅할 때는 Network 탭에서 요청/응답 순서를 확인하고, 해결 전략은 이전 요청 취소(AbortController), 최신 요청만 반영(request id), 요청 빈도 제어(debounce)를 조합합니다.
+
+> Race Condition을 알았다면 다음 질문은 당연하다. 이전 요청을 취소하거나, 최신 요청만 반영하려면 어떻게 해야 하나?
 
 ---
 
 ## 28. AbortController는 왜 필요한가
 
-Race Condition을 이해했다면, 이제 이전 요청을 어떻게 다룰지 생각해야 한다.
-그중 가장 대표적인 도구가 AbortController다.
+> **TL;DR** — AbortController는 진행 중인 비동기 작업에 취소 신호를 보내는 도구다. useEffect cleanup과 결합하면 의존성이 바뀔 때마다 이전 요청을 취소해서 race condition을 방어할 수 있다.
 
 ### 핵심 개념
 
-AbortController는 진행 중인 비동기 작업, 특히 fetch 요청 같은 작업을 취소 신호로 제어할 수 있게 해준다.
-
-- `AbortController` 인스턴스를 만든다
-- `controller.signal`을 fetch의 옵션으로 전달한다
-- `controller.abort()`를 호출하면 해당 요청이 취소된다
-- 취소된 요청은 `AbortError`라는 이름의 에러를 던진다
-
-### 예시
-
-```ts
+```js
 const controller = new AbortController();
 
-fetch(“/api/search?q=abc”, {
-  signal: controller.signal,
-})
+fetch("/api/search?q=abc", { signal: controller.signal })
   .then((res) => res.json())
-  .then((data) => {
-    console.log(data);
-  })
+  .then((data) => console.log(data))
   .catch((error) => {
-    if (error.name === “AbortError”) {
-      console.log(“요청 취소됨”);
+    if (error.name === "AbortError") {
+      console.log("요청 취소됨"); // 의도적 취소 — 에러가 아님
     } else {
-      console.error(“실제 에러:”, error);
+      console.error("실제 에러:", error);
     }
   });
 
-// 필요한 시점에 취소
-controller.abort();
+controller.abort(); // 요청 취소
 ```
 
-### 왜 이게 중요한가
+### AbortSignal.timeout() — 더 간결한 timeout 패턴
 
-AbortController가 중요한 이유는 단순히 네트워크 낭비를 줄이는 것만이 아니다.
+```js
+// 기존: Promise.race로 timeout 구현
+const result = await Promise.race([
+  fetch("/api/data"),
+  new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+]);
 
-- 오래된 요청이 의미 없이 끝까지 가지 않게 하고
-- 최신 요청 중심으로 UI를 유지하고
-- 언마운트 후 setState 같은 위험한 흐름을 줄이고
-- 불필요한 에러 처리 분기를 줄이는 데 도움이 된다
+// 신규: AbortSignal.timeout()으로 더 간결하게
+const result = await fetch("/api/data", {
+  signal: AbortSignal.timeout(5000), // 5초 후 자동 취소
+});
+```
 
-### 자주 하는 오해
+### React useEffect와의 결합
 
-- abort하면 서버 작업도 무조건 완전히 중단된다 → 클라이언트 요청 취소와 서버 내부 처리 중단은 별개다. abort()는 브라우저가 응답을 기다리는 것을 중단하는 것이지, 서버에 "작업 중단" 신호를 보내는 건 아니다
-- AbortController만 쓰면 race condition이 전부 해결된다 → 최신 요청 식별이나 상태 반영 정책도 같이 필요할 수 있다
-- 취소된 요청도 일반 에러와 똑같이 처리하면 된다 → `error.name === "AbortError"`로 구분해서 사용자에게 에러 메시지를 보여주지 않는 게 보통이다
-
-### React useEffect와 연결해서 보기
-
-컴포넌트가 언마운트되거나 의존성이 바뀔 때, useEffect의 cleanup 함수가 실행된다.
-이 cleanup에서 이전 요청을 취소하면 race condition을 방어할 수 있다.
-
-```ts
+```tsx
 useEffect(() => {
   const controller = new AbortController();
 
@@ -671,202 +760,247 @@ useEffect(() => {
     .then((res) => res.json())
     .then((data) => setResult(data))
     .catch((error) => {
-      if (error.name !== “AbortError”) {
+      if (error.name !== "AbortError") {
         console.error(error);
       }
     });
 
-  // keyword가 바뀌거나 컴포넌트가 언마운트되면 이전 요청을 취소한다
-  return () => {
-    controller.abort();
-  };
+  // keyword가 바뀌거나 컴포넌트가 언마운트되면 이전 요청을 취소
+  return () => controller.abort();
 }, [keyword]);
 ```
 
-여기서 cleanup이 실행되는 타이밍을 정확히 알아야 한다. useEffect의 cleanup은 **컴포넌트가 언마운트될 때뿐 아니라, 의존성이 바뀌어서 effect가 다시 실행되기 직전에도** 호출된다. 그래서 keyword가 바뀔 때마다 이전 fetch가 취소되는 것이다.
+cleanup이 실행되는 타이밍: useEffect의 cleanup은 **컴포넌트가 언마운트될 때뿐 아니라, 의존성이 바뀌어서 effect가 다시 실행되기 직전에도** 호출된다.
 
-> AbortController는 “취소”에 초점이 있다. 그런데 네트워크는 취소만 필요한 게 아니라 timeout, retry, backoff 같은 실패 복구 전략도 필요하다.
+### fetch 외에도 AbortSignal을 쓸 수 있는 곳
+
+| API | signal 전달 방식 |
+|---|---|
+| `fetch()` | `{ signal: controller.signal }` |
+| `addEventListener()` | `{ signal: controller.signal }` — abort 시 자동 removeEventListener |
+| `EventSource` | 직접 구현 필요 (`abort` 시 `.close()` 호출) |
+| 커스텀 비동기 로직 | `signal.addEventListener("abort", () => { ... })` |
+
+```js
+// addEventListener + AbortSignal — 자동 cleanup
+const controller = new AbortController();
+
+element.addEventListener("click", handleClick, {
+  signal: controller.signal,
+});
+
+// 나중에: removeEventListener 대신 abort()로 한번에 정리
+controller.abort(); // 등록된 이벤트 리스너가 자동으로 해제됨
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> SPA에서 유저 프로필 페이지를 열면 유저 데이터 API를 호출하는데, 유저 목록에서 빠르게 프로필 → 뒤로가기 → 다른 프로필을 반복하면 콘솔에 "Can't perform a React state update on an unmounted component" 경고가 떴다. 원인은 이전 페이지의 fetch 응답이 이미 언마운트된 컴포넌트의 `setState`를 호출한 것. useEffect cleanup에서 `controller.abort()`를 추가하니 해결.
+
+### 자주 하는 오해
+
+- abort하면 서버 작업도 무조건 완전히 중단된다 → **틀림.** 클라이언트가 응답을 기다리는 것을 중단하는 것이지, 서버 내부 처리를 멈추는 건 아니다.
+- AbortController만 쓰면 race condition이 전부 해결된다 → **취소 타이밍에 따라 응답이 이미 도착했을 수 있다.** request id 비교를 함께 써야 완전한 방어.
+- 취소된 요청도 일반 에러와 똑같이 처리하면 된다 → `error.name === "AbortError"`로 구분해서 사용자에게 에러 메시지를 보여주지 않는 게 보통이다.
 
 ### 면접 압축 답변
 
-AbortController는 진행 중인 요청에 취소 신호를 전달해 이전 요청을 중단하거나, 컴포넌트 언마운트 후 불필요한 처리 흐름을 줄이는 데 유용합니다. useEffect cleanup과 결합하면 의존성이 바뀔 때마다 이전 요청을 취소해 race condition을 방어할 수 있습니다.
+- **10초**: AbortController는 진행 중인 요청에 취소 신호를 전달합니다. useEffect cleanup과 결합하면 의존성 변경 시 이전 요청을 자동 취소해서 race condition을 방어합니다.
+- **30초**: AbortController는 fetch뿐 아니라 addEventListener, 커스텀 비동기 로직에도 쓸 수 있습니다. React에서는 useEffect cleanup에서 `abort()`를 호출해 의존성이 바뀌거나 언마운트될 때 이전 요청을 취소합니다. `AbortSignal.timeout()`으로 간결한 timeout도 구현 가능합니다. 단, abort는 클라이언트 측 취소이므로 서버 작업을 중단하지는 않습니다.
+
+> AbortController는 "취소"에 초점이 있다. 그런데 네트워크는 취소만 필요한 게 아니라 실패 복구 전략도 필요하다.
 
 ---
 
 ## 29. timeout, retry, backoff는 왜 같이 생각해야 하나
 
-실제 네트워크 환경은 항상 안정적이지 않다.
-응답이 느릴 수도 있고, 일시적으로 실패할 수도 있고, 서버가 순간적으로 과부하일 수도 있다.
+> **TL;DR** — timeout은 무한 대기 방지, retry는 일시적 실패 복구, backoff는 재시도 간격을 늘려 서버 부하를 줄이는 전략이다. 셋은 독립이 아니라 조합해서 쓴다.
 
-이때 중요한 건 “실패하면 그냥 에러”가 아니라 어떤 실패를 어떻게 복구할 것인가다.
+실제 네트워크 환경은 항상 안정적이지 않다. 응답이 느릴 수도 있고, 일시적으로 실패할 수도 있고, 서버가 순간적으로 과부하일 수도 있다.
 
-### 핵심 개념
+### 세 전략 비교
 
-**timeout**
+| 전략 | 목적 | 핵심 |
+|---|---|---|
+| **timeout** | 일정 시간 이상 응답 없으면 포기 | 사용자가 무한 로딩을 경험하지 않게 하는 첫 번째 방어선 |
+| **retry** | 실패한 요청을 다시 시도 | 일시적 네트워크 문제에 대응 |
+| **backoff** | 재시도 간격을 점점 늘림 | 서버 과부하 시 동시 재시도 방지 |
 
-- 일정 시간 이상 응답이 없으면 기다리기를 중단하는 기준이다.
-- 사용자가 무한 로딩을 경험하지 않게 하는 첫 번째 방어선이다.
+### HTTP 상태 코드별 재시도 판단
 
-**retry**
+| 상태 코드 | 의미 | 재시도 여부 | 이유 |
+|---|---|---|---|
+| **400** Bad Request | 요청 자체가 잘못됨 | 재시도 안 함 | 같은 요청을 보내도 같은 결과 |
+| **401** Unauthorized | 인증 실패 | 토큰 갱신 후 재시도 | 토큰 만료일 수 있음 |
+| **403** Forbidden | 권한 없음 | 재시도 안 함 | 권한 문제는 재시도로 안 풀림 |
+| **404** Not Found | 리소스 없음 | 재시도 안 함 | 없는 건 없는 거 |
+| **429** Too Many Requests | 요청 제한 초과 | `Retry-After` 헤더 참고 후 재시도 | 서버가 알려준 시간만큼 기다려야 |
+| **500** Internal Server Error | 서버 내부 오류 | 조건부 재시도 | 일시적일 수 있으나 지속될 수도 |
+| **502/503** Bad Gateway/Unavailable | 서버 일시 불가 | 재시도 적합 | 일시적 과부하 가능성 높음 |
+| **504** Gateway Timeout | 업스트림 타임아웃 | 재시도 적합 | 일시적일 가능성 높음 |
 
-- 실패한 요청을 다시 시도하는 전략이다.
-- 일시적인 네트워크 문제나 서버 과부하에 대응할 수 있다.
+### timeout + AbortSignal
 
-**backoff**
-
-- 재시도 간격을 점점 늘리는 방식이다.
-- 대표적으로 exponential backoff가 많이 언급된다.
-- 서버가 과부하일 때 즉시 재시도를 몰아주면 상황이 악화될 수 있어서, 간격을 점점 넓힌다.
-
-### 왜 이게 중요한가
-
-이걸 구분해야:
-
-- 사용자는 계속 무한 로딩만 보지 않게 되고
-- 일시적인 장애는 자동 복구할 수 있고
-- 서버에 과도한 재시도를 몰아주지 않게 된다
-
-### 자주 하는 오해
-
-- 실패하면 무조건 재시도하면 된다 → 틀림. 멱등하지 않은 요청(결제, 주문 생성 등)은 재시도하면 중복 처리될 위험이 있다
-- timeout이 길수록 사용자 경험이 좋다 → 틀림. 너무 길면 체감상 앱이 멈춘 것처럼 느껴질 수 있다
-- retry는 프론트에서만 고민하면 된다 → 서버의 멱등성, rate limiting, 에러 정책과 같이 봐야 한다
-
-### 실무 연결
-
-예를 들어:
-
-- GET 요청은 재시도에 더 적합한 편이다 (같은 요청을 여러 번 보내도 결과가 같다)
-- 결제 같은 POST 요청은 멱등성 키 없이 함부로 재시도하면 위험할 수 있다
-- 업로드는 실패 원인에 따라 재시도 정책을 더 신중하게 설계해야 한다
-- HTTP 상태 코드에 따라 재시도 여부를 나눌 수도 있다: 503(일시 과부하)은 재시도, 400(잘못된 요청)은 재시도해도 의미 없음
-
-### timeout 경쟁 예시
-
-```ts
-function timeoutPromise(ms: number) {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("timeout")), ms);
-  });
+```js
+// AbortSignal.timeout() 활용
+async function fetchWithTimeout(url, ms = 5000) {
+  return fetch(url, { signal: AbortSignal.timeout(ms) });
 }
 
-async function fetchWithTimeout(url: string, ms = 5000) {
-  return Promise.race([fetch(url), timeoutPromise(ms)]);
+// 또는 수동 구현 (더 세밀한 제어가 필요할 때)
+async function fetchWithTimeout(url, ms = 5000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ms);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 ```
 
-### exponential backoff 예시
+### exponential backoff + jitter
 
-```ts
-async function fetchWithRetry(
-  url: string,
-  maxRetries = 3,
-  baseDelay = 1000
-): Promise<Response> {
+```js
+async function fetchWithRetry(url, options = {}) {
+  const { maxRetries = 3, baseDelay = 1000, timeout = 5000 } = options;
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response;
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      // 재시도 가능한 상태 코드인지 확인
+      if (!response.ok) {
+        const retryable = [429, 500, 502, 503, 504].includes(response.status);
+        if (!retryable || attempt === maxRetries) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        // 429면 Retry-After 헤더 참고
+        if (response.status === 429) {
+          const retryAfter = response.headers.get("Retry-After");
+          if (retryAfter) {
+            await new Promise((r) => setTimeout(r, parseInt(retryAfter) * 1000));
+            continue;
+          }
+        }
+      } else {
+        return response;
+      }
     } catch (error) {
       if (attempt === maxRetries) throw error;
-
-      // 1초, 2초, 4초... 로 간격이 늘어난다
-      const delay = baseDelay * Math.pow(2, attempt);
-      // jitter를 추가해 여러 클라이언트가 동시에 재시도하는 것을 분산
-      const jitter = delay * Math.random() * 0.5;
-      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
     }
+
+    // exponential backoff + jitter
+    const delay = baseDelay * Math.pow(2, attempt);
+    const jitter = delay * Math.random() * 0.5;
+    await new Promise((r) => setTimeout(r, delay + jitter));
   }
+
   throw new Error("unreachable");
 }
 ```
 
-jitter를 추가하는 이유: 서버 장애 시 여러 클라이언트가 정확히 같은 간격으로 재시도하면 동시에 요청이 몰린다. 랜덤 지연을 더해서 이를 분산시킨다.
+jitter를 추가하는 이유: 서버 장애 시 여러 클라이언트가 정확히 같은 간격으로 재시도하면 동시에 요청이 몰린다(**thundering herd**). 랜덤 지연을 더해서 이를 분산시킨다.
 
-> 이제 요청 실패 복구 전략까지 봤다. 다음엔 연속 입력이나 중복 클릭처럼 요청 자체를 덜 만들고 최신 것만 유지하는 전략으로 넘어간다.
+```
+jitter 없이:     1초   2초   4초    ← 모든 클라이언트가 동시에 재시도
+jitter 적용:     1.3초  2.7초  3.5초  ← 분산되어 서버 부하 감소
+```
+
+### 멱등성 — 재시도해도 안전한가?
+
+| 메서드 | 멱등성 | 재시도 안전성 |
+|---|---|---|
+| **GET** | 멱등 | 안전 (같은 요청 여러 번 = 같은 결과) |
+| **PUT** | 멱등 | 안전 (같은 데이터로 덮어쓰기) |
+| **DELETE** | 멱등 | 안전 (이미 삭제된 건 다시 삭제해도 OK) |
+| **POST** | **비멱등** | **위험** (주문 생성, 결제 등 중복 처리 가능) |
+| **PATCH** | 경우에 따라 | 주의 필요 |
+
+POST 요청을 재시도하려면 **멱등성 키(idempotency key)**를 함께 보내야 서버가 중복을 걸러낼 수 있다.
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 결제 API 호출 중 네트워크 에러가 발생해서 프론트에서 자동 retry를 했는데, 서버에서는 첫 번째 요청이 이미 처리된 상태라 결제가 2번 된 사고. 이후 결제 API에는 retry를 끄고, 멱등성 키를 포함해서 서버가 중복 요청을 거부하도록 변경.
+
+### 자주 하는 오해
+
+- 실패하면 무조건 재시도하면 된다 → **틀림.** 비멱등 요청(결제 등)은 재시도하면 중복 처리될 위험이 있다.
+- timeout이 길수록 사용자 경험이 좋다 → **틀림.** 너무 길면 체감상 앱이 멈춘 것처럼 느껴진다.
+- retry는 프론트에서만 고민하면 된다 → **서버의 멱등성, rate limiting, 에러 정책**과 같이 봐야 한다.
 
 ### 면접 압축 답변
 
-timeout은 오래 기다리지 않기 위한 기준이고, retry는 실패한 요청을 다시 시도하는 전략이며, backoff는 재시도 간격을 점점 늘려 과부하를 줄이는 방식입니다. 다만 모든 요청을 무조건 재시도하면 안 되고, 멱등성과 사용자 경험을 함께 고려해야 합니다.
+- **10초**: timeout은 오래 기다리지 않기 위한 기준, retry는 일시적 실패 복구, backoff는 재시도 간격을 점점 늘려 서버 부하를 줄이는 전략입니다.
+- **30초**: timeout은 `AbortSignal.timeout()`으로 구현하고, retry는 HTTP 상태 코드(429, 502, 503 등)에 따라 판단합니다. exponential backoff + jitter로 thundering herd를 방지합니다. 단, POST 같은 비멱등 요청은 멱등성 키 없이 재시도하면 중복 처리 위험이 있으므로 서버와 함께 설계해야 합니다.
+
+> 이제 요청 실패 복구 전략까지 봤다. 다음엔 요청 자체를 덜 만들고 최신 것만 유지하는 전략으로 넘어간다.
 
 ---
 
 ## 30. 중복 요청 방지, 최신 요청 반영, 그리고 디바운스/스로틀
 
-좋은 프론트엔드는 실패를 잘 처리하는 것뿐 아니라, 애초에 불필요한 요청을 덜 만들고, 의미 있는 응답만 반영한다.
-이 섹션에서는 요청 빈도 제어부터 최신 응답 반영까지 한꺼번에 본다.
+> **TL;DR** — 좋은 프론트엔드는 실패를 잘 처리하는 것뿐 아니라, 불필요한 요청을 줄이고(debounce/throttle), 이전 요청을 취소하고(AbortController), 최신 응답만 반영한다(request id). 실무에서는 이 셋을 조합한다.
 
-### 핵심 전략 정리
+### 전략 한눈에 보기
 
 | 전략 | 목적 | 대표 도구 |
-|------|------|-----------|
+|---|---|---|
 | 입력 빈도 줄이기 | 불필요한 요청 자체를 줄임 | debounce, throttle |
 | 이전 요청 취소 | 의미 없는 진행 중 요청을 중단 | AbortController |
-| 최신 요청만 반영 | 늦게 온 응답이 화면을 덮지 않게 함 | request id 비교, 시퀀스 번호 |
-| 같은 키 요청 재사용 | 동일 요청 중복을 없앰 | 캐시, dedupe |
+| 최신 요청만 반영 | 늦게 온 응답이 화면을 덮지 않게 함 | request id 비교 |
+| 같은 키 요청 재사용 | 동일 요청 중복을 없앰 | 캐시, dedupe (SWR, React Query) |
 | 중복 클릭 방지 | 사용자 실수로 여러 번 실행되는 것을 막음 | 버튼 disable, pending 상태 |
 
-### 디바운스와 스로틀
+### 디바운스 vs 스로틀
 
-**디바운스(debounce)**
+```
+사용자 입력: ─ a ─ ab ─ abc ─ abcd ──────── (멈춤)
 
-연속 입력이 멈춘 뒤 일정 시간이 지나면 **한 번** 실행한다.
+debounce(300ms): ─────────────────────────── abcd (마지막 입력 후 300ms에 실행)
 
-```ts
-function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
-  let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
+throttle(300ms): ─ a ──────── abc ──────── abcd (300ms마다 최대 1회 실행)
+```
+
+| | debounce | throttle |
+|---|---|---|
+| **동작** | 연속 입력이 멈춘 뒤 일정 시간 후 1회 실행 | 일정 시간 동안 최대 1회만 실행 |
+| **적합한 경우** | 검색 자동완성, 폼 validation | 스크롤, 리사이즈, 마우스 이동 |
+| **특징** | 마지막 입력만 처리 | 주기적으로 반응 |
+
+```js
+// debounce 구현
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
   };
 }
 
-// 사용 예: 입력이 300ms 동안 멈추면 검색 실행
-const debouncedSearch = debounce((keyword: string) => {
-  fetch(`/api/search?q=${keyword}`);
-}, 300);
-
-input.addEventListener(“input”, (e) => {
-  debouncedSearch(e.target.value);
-});
-```
-
-**스로틀(throttle)**
-
-일정 시간 동안 **최대 한 번만** 실행되게 제한한다.
-
-```ts
-function throttle<T extends (...args: any[]) => void>(fn: T, limit: number) {
+// throttle 구현
+function throttle(fn, limit) {
   let throttled = false;
-  return (...args: Parameters<T>) => {
+  return (...args) => {
     if (throttled) return;
     throttled = true;
     fn(...args);
-    setTimeout(() => {
-      throttled = false;
-    }, limit);
+    setTimeout(() => { throttled = false; }, limit);
   };
 }
-
-// 사용 예: 스크롤 이벤트를 200ms마다 최대 한 번만 처리
-window.addEventListener(“scroll”, throttle(() => {
-  checkScrollPosition();
-}, 200));
 ```
-
-**언제 뭘 쓰나:**
-
-- 검색창 자동완성 → debounce (입력이 끝난 뒤 요청)
-- 스크롤/리사이즈 이벤트 → throttle (일정 간격으로 계속 반응)
-- 버튼 연타 방지 → throttle 또는 disable 상태 관리
 
 ### 최신 요청만 반영하는 패턴
 
-```ts
+```js
 let requestId = 0;
 
-async function search(keyword: string) {
+async function search(keyword) {
   const currentId = ++requestId;
   const response = await fetch(`/api/search?q=${keyword}`);
   const data = await response.json();
@@ -878,12 +1012,10 @@ async function search(keyword: string) {
 }
 ```
 
-이 방식은 AbortController로 취소하지 못한 요청이 남아 있어도, 가장 마지막 요청만 화면에 반영하게 만든다.
-
 ### 실전 조합: debounce + AbortController + 최신 요청 체크
 
-```ts
-function useSearch(keyword: string) {
+```tsx
+function useSearch(keyword) {
   const [results, setResults] = useState([]);
   const requestIdRef = useRef(0);
 
@@ -900,7 +1032,7 @@ function useSearch(keyword: string) {
           }
         })
         .catch((error) => {
-          if (error.name !== “AbortError”) console.error(error);
+          if (error.name !== "AbortError") console.error(error);
         });
     }, 300); // debounce 300ms
 
@@ -915,67 +1047,61 @@ function useSearch(keyword: string) {
 ```
 
 이 패턴은 세 가지 방어를 동시에 한다:
-1. debounce로 요청 빈도를 줄이고
-2. AbortController로 이전 요청을 취소하고
-3. request id로 혹시 취소가 안 된 응답이 와도 무시한다
+1. **debounce**로 요청 빈도를 줄이고
+2. **AbortController**로 이전 요청을 취소하고
+3. **request id**로 혹시 취소가 안 된 응답이 와도 무시한다
+
+### 실무에서의 선택
+
+| 상황 | 추천 조합 |
+|---|---|
+| 검색 자동완성 | debounce + AbortController + request id |
+| 필터 조합 변경 | debounce + AbortController |
+| 무한 스크롤 | throttle + 페이지 번호 체크 |
+| 저장 버튼 연타 방지 | 버튼 disable + pending 상태 |
+| CSV 업로드 중복 제출 방지 | 버튼 disable + 서버 멱등성 키 |
+| 실시간 위치 전송 | throttle + 최신 좌표만 전송 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 주문서 "제출" 버튼을 연타하면 주문이 여러 개 생성되는 버그. 프론트에서 버튼 disable + `isSubmitting` 상태로 중복 클릭을 막았지만, 네트워크가 느린 환경에서는 첫 클릭의 응답이 오기 전에 두 번째 클릭이 들어갈 수 있었다. 최종적으로 서버에 멱등성 키를 함께 전송하고, 프론트에서는 제출 중 상태를 명확히 관리하는 이중 방어로 해결.
 
 ### 자주 하는 오해
 
-- debounce만 걸면 race condition이 사라진다 → 요청 횟수는 줄지만 순서 문제는 남을 수 있다
-- AbortController만 쓰면 충분하다 → 취소 타이밍에 따라 응답이 이미 도착했을 수 있다
-- 서버가 알아서 막아줄 것이다 → 프론트에서도 충분히 방어해야 사용자 경험이 좋아진다
-
-### 실무 연결
-
-대표적인 사용처:
-
-- 검색 자동완성 → debounce + AbortController
-- 필터 조합 변경 → debounce + 최신 요청 체크
-- 무한 스크롤 → throttle + 페이지 번호 체크
-- CSV 업로드 중 중복 제출 방지 → 버튼 disable + pending 상태
-- 저장 버튼 연타 방지 → throttle 또는 optimistic lock
-
-> 이제 비동기 흐름의 큰 축을 봤다. 다음 챕터에서는 “요청/응답 데이터의 형태를 어떻게 믿고 다룰 것인가”라는 질문으로 넘어간다.
+- debounce만 걸면 race condition이 사라진다 → **요청 횟수는 줄지만 순서 문제는 남을 수 있다.**
+- AbortController만 쓰면 충분하다 → **취소 타이밍에 따라 응답이 이미 도착했을 수 있다.**
+- 서버가 알아서 막아줄 것이다 → **프론트에서도 충분히 방어해야 사용자 경험이 좋아진다.**
 
 ### 면접 압축 답변
 
-중복 요청 방지는 debounce, throttle, 버튼 disable, 캐시 재사용으로 요청 자체를 줄이고, race condition 대응은 AbortController로 이전 요청을 취소하거나 request id 비교로 최신 응답만 반영합니다. 실무에서는 이 전략들을 조합해서 쓰는 것이 일반적입니다.
+- **10초**: debounce/throttle로 요청 빈도를 줄이고, AbortController로 이전 요청을 취소하고, request id로 최신 응답만 반영합니다. 실무에서는 이 전략들을 조합합니다.
+- **30초**: 중복 요청 방지는 debounce(입력 끝난 뒤 실행), throttle(일정 간격으로 실행), 버튼 disable로 요청 자체를 줄입니다. race condition 대응은 AbortController로 이전 요청을 취소하고 request id 비교로 최신 응답만 반영합니다. 검색 자동완성 같은 경우에는 debounce + AbortController + request id를 조합하는 것이 가장 안전한 패턴입니다.
 
 ---
 
-## 31. 이 챕터를 읽고 나면 무엇이 연결되어야 하나
+# 다음 챕터로의 연결
 
-이 챕터를 다 읽고 나면 아래가 한 덩어리로 보여야 한다.
+이 챕터에서 다룬 것을 한 줄로 요약하면:
 
-- 비동기는 속도 문제가 아니라 흐름 제어 문제다
-- 블로킹은 사용자 경험과 직접 연결된다
-- 이벤트 루프는 실행 순서를 설명하는 기반이다
-- Promise와 async/await는 비동기 흐름을 구조적으로 다루기 위한 도구다
-- 여러 요청이 겹치면 race condition이 생긴다
-- AbortController, request id 비교, debounce, retry/backoff는 그에 대한 실무 대응이다
+> **"실행 순서가 꼬일 때 어떤 버그가 생기고, 어떻게 통제할 것인가"**
 
-즉,
-이번 챕터는 단순 문법 챕터가 아니라
-**”실행 순서가 꼬일 때 어떤 버그가 생기고, 어떻게 통제할 것인가”**를 배우는 챕터다.
+### 이 챕터를 읽고 나면 한 덩어리로 보여야 하는 것
 
-### 이 챕터를 읽은 뒤 자연스럽게 이어질 다음 질문들
+```
+비동기는 속도 문제가 아니라 흐름 제어 문제다
+  → 블로킹은 사용자 경험과 직접 연결된다
+    → 이벤트 루프는 실행 순서를 설명하는 기반이다
+      → Promise/async/await는 비동기 흐름을 구조적으로 다루는 도구다
+        → 여러 요청이 겹치면 race condition이 생긴다
+          → AbortController, request id, debounce, retry/backoff로 통제한다
+```
 
-1. TypeScript를 왜 쓰는가?
-2. any, unknown, never는 어떤 철학 차이가 있나?
-3. narrowing은 왜 런타임 조건과 연결되나?
-4. generic은 왜 재사용성과 타입 안전성을 동시에 주나?
-5. TypeScript가 있어도 왜 Zod 같은 런타임 검증이 필요하나?
+다음 챕터(챕터 4)에서는 방향을 바꿔서 **타입 시스템**으로 넘어간다.
 
----
+- TypeScript를 왜 쓰는가?
+- any, unknown, never는 어떤 철학 차이가 있나?
+- narrowing은 왜 런타임 조건과 연결되나?
+- generic은 왜 재사용성과 타입 안전성을 동시에 주나?
+- TypeScript가 있어도 왜 Zod 같은 런타임 검증이 필요하나?
 
-## 사용법
-
-이 챕터는 아래 순서로 보면 좋다.
-
-1. 동기/비동기, 블로킹/논블로킹으로 개념 축을 먼저 잡는다.
-2. 이벤트 루프로 실제 실행 순서를 이해한다.
-3. Promise와 async/await로 문법 계층을 정리한다.
-4. race condition, AbortController, retry/backoff로 실무 문제를 연결한다.
-5. 마지막에 면접 압축 답변만 따로 말로 꺼내 본다.
-
-이렇게 보면 단순 문법 암기가 아니라, 비동기 흐름 전체가 하나의 구조로 잡힌다.
+비동기 흐름에서 **"값이 언제 도착하는가"**를 알았으니, 이제 **"그 값의 형태를 어떻게 믿고 다룰 것인가"**를 볼 차례다.

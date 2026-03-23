@@ -2,7 +2,7 @@
 title: "웹 성능 최적화에서 Core Web Vitals와 체감 성능까지"
 chapter: "08"
 summary: "Core Web Vitals(LCP, INP, CLS), 번들 크기, 코드 스플리팅, 이미지 최적화, 체감 성능까지 이해하는 챕터입니다."
-estimatedReadMinutes: 45
+estimatedReadMinutes: 55
 learningGoals:
   - "성능 최적화가 측정부터 시작해야 하는 이유를 설명한다"
   - "LCP, INP, CLS가 각각 어떤 사용자 경험 문제를 나타내는지 구분한다"
@@ -14,1551 +14,523 @@ learningGoals:
 
 이 챕터의 목표는 아래 한 줄로 요약된다.
 
-> **성능 최적화는 단순히 번들 크기를 줄이는 작업이 아니라, 사용자가 "얼마나 빨리 보이고, 얼마나 빨리 반응하고, 얼마나 덜 흔들리는가"를 측정하고 개선하는 작업이라는 관점으로 이해해야 한다.**
+> **성능 최적화는 단순히 번들 크기를 줄이는 작업이 아니라, 사용자가 "얼마나 빨리 보이고, 얼마나 빨리 반응하고, 얼마나 덜 흔들리는가"를 측정하고 개선하는 작업이다.**
+
+### 전체 흐름 맵
+
+```
+측정부터 시작한다 (무엇이 느린가?)
+  → Core Web Vitals (LCP / INP / CLS)
+    → 필드 데이터 + 실험실 데이터 (RUM + Lighthouse)
+      → 브라우저 렌더링 파이프라인 (DOM → Layout → Paint → Composite)
+        → 번들 크기 + 코드 스플리팅 (JS 최적화)
+          → 이미지 최적화 + Lazy Loading (리소스 최적화)
+            → 렌더 차단 리소스 + 메인 스레드 점유 (실행 최적화)
+              → 긴 리스트 / Observer API (무거운 UI 전략)
+                → 체감 성능 + fallback UI (UX 설계)
+```
 
 ---
 
-## 99. 성능 최적화는 무엇부터 측정해야 하나
+## 99. 측정부터 시작한다 — Core Web Vitals
 
-성능 최적화 이야기를 시작하면 많은 사람이 바로 코드 스플리팅이나 이미지 압축부터 떠올린다.
-그런데 실제로는 그 순서가 자주 틀린다.
+> **TL;DR** — 성능 최적화는 해결책부터가 아니라 측정부터. Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 "느리다"를 구체 지표로 분해한다. 필드 데이터와 실험실 데이터를 함께 봐야 한다.
 
-좋은 성능 최적화의 시작은:
+### 최적화의 올바른 순서
 
-> **무엇이 느린지 먼저 측정하는 것**
-
-이다.
-
-### 핵심 개념
-
-성능 최적화는 보통 아래 순서로 가는 게 좋다.
-
-1. 무엇이 느린지 측정한다
+1. **무엇이 느린지 측정한다** (Lighthouse, DevTools, web-vitals)
 2. 느림이 사용자에게 어떤 체감으로 나타나는지 본다
 3. 병목이 네트워크인지, 렌더링인지, JS 실행인지 분해한다
 4. 가장 영향 큰 지점부터 개선한다
 5. 다시 측정해서 실제로 나아졌는지 확인한다
 
-### 왜 이게 중요한가
+### Core Web Vitals 3대 지표
 
-이걸 놓치면 흔히 이런 일이 생긴다.
+| 지표 | 측정 대상 | 기준 (Good) | "느리다"의 번역 |
+|---|---|---|---|
+| **LCP** | 주요 콘텐츠 표시 속도 | 2.5초 이하 | "페이지가 안 떠요" |
+| **INP** | 상호작용 반응성 | 200ms 이하 | "눌렀는데 반응이 없어요" |
+| **CLS** | 시각적 안정성 | 0.1 이하 | "버튼이 밀려서 다른 거 눌렀어요" |
 
-- 번들 줄였는데 체감은 별 차이 없음
-- useMemo를 잔뜩 넣었는데 실제 병목은 이미지였음
-- lazy loading을 넣었는데 오히려 LCP가 나빠짐
-- 숫자는 좋아졌는데 UX는 여전히 답답함
+### 필드 데이터 vs 실험실 데이터
 
-### 자주 하는 오해
+| | 필드 데이터 (RUM) | 실험실 데이터 (Lab) |
+|---|---|---|
+| **수집 환경** | 실제 사용자 브라우저 | 통제된 테스트 환경 |
+| **대표 도구** | CrUX, PageSpeed Insights, web-vitals | Lighthouse, DevTools, WebPageTest |
+| **장점** | 실제 기기/네트워크 반영 | 재현 쉬움, 디버깅 편함 |
+| **단점** | 디버깅 어려움 | 실제 환경과 다를 수 있음 |
 
-- 성능 최적화는 일단 번들부터 줄이면 된다 → 틀림
-- 렌더 횟수만 줄이면 된다 → 틀림
-- Lighthouse 점수만 오르면 성공이다 → 실제 사용자 체감과 차이가 있을 수 있다
+```tsx
+// web-vitals 라이브러리로 필드 데이터 수집
+import { onLCP, onINP, onCLS } from "web-vitals";
 
-### 실무 연결
+onLCP((metric) => sendToAnalytics({ name: "LCP", value: metric.value }));
+onINP((metric) => sendToAnalytics({ name: "INP", value: metric.value }));
+onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
+```
 
-성능 최적화는 보통 아래 질문으로 시작하면 좋다.
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- 첫 화면이 느린가?
-- 클릭 후 반응이 늦는가?
-- 화면이 흔들리는가?
-- 특정 페이지나 특정 기기에서만 느린가?
-- 필드 데이터와 로컬 테스트가 같은가?
-
-> 이제 측정부터 해야 한다는 걸 알았다. 그다음엔 현재 웹 성능에서 가장 중요한 공통 기준인 **Core Web Vitals**로 넘어가야 한다.
-
-### 면접 압축 답변
-
-**10초**: 성능 최적화는 해결책부터 적용하는 것이 아니라, 먼저 무엇이 느린지 측정하고 병목을 분해한 뒤 가장 영향 큰 지점부터 개선해야 합니다.
-
-**30초**: 성능 최적화는 해결책부터 적용하는 것이 아니라, 먼저 무엇이 느린지 측정하고 병목을 분해하는 것부터 시작해야 합니다. 네트워크, 렌더링, 자바스크립트 실행 중 어디가 실제 사용자 체감에 가장 큰 영향을 주는지 확인한 뒤 개선해야 효과가 큽니다. Lighthouse 점수만 보는 것이 아니라 실사용자 환경의 필드 데이터와 함께 봐야 합니다.
-
----
-
-## 100. Core Web Vitals는 왜 지금 웹 성능의 중심 지표인가
-
-성능 이야기를 할 때 현재 가장 자주 나오는 기준이 Core Web Vitals다.
-이건 단순 점수놀이가 아니라, 실제 사용자 경험의 핵심 축을 세 가지로 압축해 보여준다.
-
-### 핵심 개념
-
-Core Web Vitals는 현재 아래 세 지표로 구성된다.
-
-| 지표 | 의미 | 기준 (Good) |
-|------|------|-------------|
-| **LCP** | 주요 콘텐츠 표시 속도 | 2.5초 이하 |
-| **INP** | 상호작용 반응성 | 200ms 이하 |
-| **CLS** | 시각적 안정성 | 0.1 이하 |
-
-즉:
-
-- 로딩
-- 반응성
-- 시각적 안정성
-
-을 각각 대표한다고 보면 된다.
-
-### 왜 이게 중요한가
-
-이 세 지표가 중요한 이유는
-"페이지가 빨라 보이는가"를 더 구체적으로 분해하게 해주기 때문이다.
-
-예를 들어:
-
-- 페이지는 열렸는데 주요 콘텐츠가 늦게 보이면 LCP 문제
-- 눌렀는데 반응이 굼뜨면 INP 문제
-- 다 보였는데 버튼이 밀리면 CLS 문제
-
-Google은 이 지표들을 검색 순위 요인으로도 사용하기 때문에, SEO 관점에서도 중요하다.
+> useMemo를 모든 컴포넌트에 넣었는데 체감 속도가 안 변함. Lighthouse로 분석하니 실제 병목은 히어로 이미지(2MB PNG)의 LCP 지연이었다. 이미지를 WebP로 바꾸고 `fetchpriority="high"`를 설정하니 LCP가 4초 → 1.8초로 개선. **측정 없이 감으로 최적화하면 엉뚱한 곳에 시간을 쓴다.**
 
 ### 자주 하는 오해
 
-- Core Web Vitals만 좋으면 모든 성능이 완벽하다 → 틀림. TTFB, TBT 등 보조 지표도 있다
-- 점수만 맞추면 된다 → 실제 사용자 흐름과 같이 봐야 한다
-- FID가 아직도 핵심이다 → 2024년 3월부터 INP가 FID를 대체했다
-
-### 실무 연결
-
-좋은 성능 답변은 보통 이렇게 한다.
-
-- 초기 표시 문제 → LCP 관점
-- 클릭 반응 문제 → INP 관점
-- 레이아웃 밀림 문제 → CLS 관점
-
-즉 "느리다"를 구체 지표로 번역할 수 있어야 한다.
-
-> 이제 Core Web Vitals 큰 그림은 봤다. 그다음엔 각각의 지표를 하나씩 정확히 이해해야 한다. 먼저 **LCP**로 넘어간다.
+- 번들부터 줄이면 된다 → **측정 없이 시작하면 병목을 놓친다.**
+- Lighthouse 점수만 오르면 성공이다 → **실제 사용자 체감(필드 데이터)과 다를 수 있다.**
+- FID가 아직 핵심이다 → **2024년 3월부터 INP가 FID를 대체했다.**
 
 ### 면접 압축 답변
 
-**10초**: Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 사용자 경험을 측정하는 핵심 웹 성능 지표입니다.
-
-**30초**: Core Web Vitals는 현재 웹 성능에서 가장 중요한 공통 사용자 경험 지표로, LCP는 주요 콘텐츠 표시 속도, INP는 상호작용 반응성, CLS는 시각적 안정성을 나타냅니다. 2024년부터 FID 대신 INP가 공식 지표가 됐으며, Google 검색 순위에도 반영되기 때문에 SEO 관점에서도 관리가 필요합니다.
+- **10초**: Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 사용자 경험을 측정하며, 성능 최적화는 측정부터 시작해야 합니다.
+- **30초**: 성능 최적화는 측정 → 분해 → 개선 → 재측정 순서로 합니다. Core Web Vitals의 LCP(2.5초 이하), INP(200ms 이하), CLS(0.1 이하)가 핵심 기준이며, 필드 데이터(CrUX, web-vitals)로 실제 문제를 발견하고 실험실 데이터(Lighthouse, DevTools)로 디버깅합니다.
 
 ---
 
-## 101. LCP는 왜 "첫 화면이 빠른가"를 가장 잘 드러내는 지표인가
+## 100. LCP — 주요 콘텐츠 표시 속도
 
-많은 사람이 성능을 말할 때 "페이지 로드가 빠르다"라고 뭉뚱그린다.
-하지만 사용자는 전체 문서가 다 끝날 때까지 기다리지 않는다.
-보통은 **주요 콘텐츠가 보였는가**를 기준으로 빠름을 느낀다.
+> **TL;DR** — LCP는 뷰포트에서 가장 큰 콘텐츠가 렌더링 완료되는 시점. 서버 응답(TTFB), 리소스 발견 시점, 다운로드 우선순위, 렌더 차단이 복합 원인. LCP 이미지에 lazy loading을 걸면 오히려 악화.
 
-### 핵심 개념
-
-LCP(Largest Contentful Paint)는 뷰포트 안에서 가장 큰 콘텐츠 요소가 화면에 렌더링 완료되는 시점을 측정한다.
-
-LCP 후보가 되는 요소:
-
-- `<img>` 요소
-- `<svg>` 안의 `<image>` 요소
-- `<video>`의 포스터 이미지
-- `background-image`로 로드된 요소
-- 큰 텍스트 블록 (`<p>`, `<h1>` 등 블록 레벨 요소)
-
-### 왜 이게 중요한가
-
-이 지표가 중요한 이유는
-사용자가 "이제 페이지가 뜨기 시작했다"라고 느끼는 순간과 비교적 잘 맞기 때문이다.
-
-즉:
-
-- 스켈레톤만 빨리 떠도 주요 콘텐츠가 늦으면 LCP는 여전히 나쁠 수 있고
-- 작은 텍스트만 먼저 보여도 핵심 이미지가 늦으면 체감은 느릴 수 있다
-
-### LCP를 늦추는 대표 요인과 개선 전략
-
-LCP가 나쁘다고 해서 무조건 이미지 포맷부터 바꾸는 건 아니다. LCP는 보통 여러 지연이 합쳐진 결과다.
+### LCP를 늦추는 원인과 개선
 
 | 원인 | 개선 방향 |
-|------|----------|
+|---|---|
 | 서버 응답 지연 (TTFB) | 서버 최적화, CDN, 캐시 |
 | LCP 리소스 발견이 늦음 | HTML 구조 개선, `<link rel="preload">` |
 | LCP 리소스 다운로드 지연 | 이미지 최적화, `fetchpriority="high"` |
 | 렌더 차단 CSS/JS | Critical CSS, `async`/`defer` |
 | LCP 이미지를 잘못 lazy load | lazy 제거, priority 설정 |
 
-### 자주 하는 오해
-
-- DOMContentLoaded가 빠르면 첫 화면도 빠르다 → 틀림. DOMContentLoaded는 HTML 파싱 완료 시점이지, 주요 콘텐츠 렌더 시점이 아니다
-- spinner가 빨리 보이면 충분하다 → 핵심 콘텐츠가 중요하다
-- LCP는 이미지 사이트에만 중요하다 → 큰 텍스트 블록도 LCP 후보가 될 수 있다
-- skeleton 넣으면 LCP도 좋아진다 → LCP 요소 자체가 빨라져야 한다
-- lazy loading은 무조건 성능에 좋다 → LCP 이미지엔 오히려 안 좋을 수 있다
-
-### 예시
-
 ```html
 <!-- 나쁜 예: LCP 이미지에 lazy loading -->
 <img src="/hero.jpg" loading="lazy" alt="hero" />
-```
 
-```html
 <!-- 좋은 예: LCP 이미지에 높은 우선순위 -->
 <img src="/hero.jpg" fetchpriority="high" alt="hero" />
 <link rel="preload" as="image" href="/hero.jpg" />
 ```
 
 ```tsx
-// Next.js에서 LCP 이미지 처리
-import Image from "next/image";
-
-// priority 속성으로 LCP 이미지 우선 로딩
+// Next.js에서 LCP 이미지
 <Image src="/hero.jpg" alt="hero" width={1200} height={600} priority />
 ```
 
-### 실무 연결
+### 실무 에피소드 — 이런 상황에서 만난다
 
-LCP 분석할 때 Chrome DevTools Performance 패널에서 LCP 마커를 찾고, 해당 요소가 무엇인지 확인하는 것이 첫 단계다. 그 뒤에 위 표의 원인 중 어디에 해당하는지 판단한다.
-
-> 이제 로딩 성능의 핵심 축을 봤다. 그다음엔 사용자가 눌렀을 때 얼마나 빨리 반응하는지를 보는 **INP**로 넘어가야 한다.
+> 랜딩 페이지 LCP가 4초인데 원인을 못 찾겠다는 의뢰. DevTools Performance 패널에서 LCP 마커를 확인하니 히어로 이미지가 CSS `background-image`로 들어가 있어서 브라우저가 CSS 파싱 후에야 이미지 요청을 시작함. `<img>` 태그로 바꾸고 `preload` 힌트를 추가하니 LCP 2.1초로 개선.
 
 ### 면접 압축 답변
 
-**10초**: LCP는 뷰포트에서 가장 큰 콘텐츠가 렌더링되는 시점을 측정하는 지표로, 사용자가 "페이지가 떴다"고 느끼는 순간과 가장 잘 맞습니다.
-
-**30초**: LCP는 사용자가 주요 콘텐츠를 얼마나 빨리 보게 되는지를 보여주는 지표입니다. 서버 응답, 리소스 발견 시점, 다운로드 우선순위, 렌더 차단 리소스까지 함께 봐야 하며, 특히 LCP 이미지에 lazy loading을 걸면 중요한 리소스 로딩이 늦어질 수 있어 `fetchpriority="high"`나 `preload`를 사용하는 것이 좋습니다.
+- **10초**: LCP는 뷰포트에서 가장 큰 콘텐츠의 렌더링 완료 시점이며, TTFB, 리소스 우선순위, 렌더 차단이 복합 원인입니다.
+- **30초**: LCP는 사용자가 "페이지가 떴다"고 느끼는 순간과 가장 잘 맞는 지표입니다. 서버 응답, 리소스 발견 시점, 다운로드 우선순위, 렌더 차단을 함께 봐야 하며, LCP 이미지에 lazy loading을 걸면 오히려 악화됩니다. `fetchpriority="high"`나 `preload`로 우선 로딩하는 것이 핵심입니다.
 
 ---
 
-## 102. INP는 왜 "클릭했는데 답답한 느낌"을 더 잘 설명하나
+## 101. INP — 상호작용 반응성
 
-예전엔 응답성 얘기에서 FID(First Input Delay)를 많이 들었지만,
-현재는 INP가 핵심 지표다.
+> **TL;DR** — INP는 모든 상호작용 중 가장 느린 응답 시간의 대표값(~p98). FID가 첫 입력만 봤다면 INP는 전체를 본다. Long Task(50ms+)와 메인 스레드 점유가 핵심 원인.
 
-### 핵심 개념
+### FID vs INP
 
-INP(Interaction to Next Paint)는 페이지 수명 동안 발생하는 모든 상호작용(클릭, 탭, 키 입력) 중에서
-**가장 느린 상호작용의 지연 시간**을 대표값으로 보고한다.
-(정확히는 상호작용 50개당 가장 느린 것을 하나씩 제외하는 방식이며, 결과적으로 약 p98 수준이다.)
-
-FID와의 차이:
-
-| | FID | INP |
+| | FID (폐기) | INP (현재) |
 |---|---|---|
 | 측정 범위 | 첫 번째 입력만 | 모든 상호작용 |
-| 측정 구간 | 입력 지연(input delay)만 | 입력 지연 + 처리 시간 + 렌더 지연 전체 |
-| 폐기 시점 | 2024년 3월 | 현재 공식 지표 |
+| 측정 구간 | 입력 지연만 | 입력 지연 + 처리 + 렌더 지연 전체 |
 
-### 왜 이게 중요한가
+### INP가 나쁠 때 흔한 원인과 개선
 
-사용자는 보통 이렇게 느낀다.
-
-- 눌렀는데 아무 일도 안 일어남
-- 입력했는데 UI가 한 박자 늦음
-- 드롭다운이 눌렀는데 늦게 열림
-- 필터 누르면 잠깐 얼어붙음
-
-이건 로딩 문제가 아니라 **응답성 문제**다.
-INP는 바로 이 축을 더 잘 잡아낸다.
-
-### INP가 나쁠 때 흔한 원인
-
-- 긴 JavaScript 작업 (Long Task)
-- 무거운 렌더 계산
-- 입력 직후 비싼 state 업데이트
-- 너무 많은 동기 처리
-- 큰 리스트 재계산
-
-### 예시
+| 원인 | 개선 |
+|---|---|
+| 긴 JS 작업 (Long Task) | `setTimeout`/`scheduler.yield()`로 쪼개기 |
+| 무거운 렌더 계산 | `startTransition`으로 urgent/non-urgent 분리 |
+| 큰 리스트 재계산 | virtualization, 상태 범위 축소 |
+| 무거운 JSON 파싱 | Web Worker로 오프로드 |
 
 ```tsx
 // 나쁜 예: 클릭 핸들러에서 무거운 동기 작업
 function handleClick() {
-  // 수천 개 항목을 동기적으로 필터링 + 정렬
   const filtered = hugeList.filter(complexFilter).sort(complexSort);
   setItems(filtered);
 }
-```
 
-```tsx
-// 개선 예: startTransition으로 긴급하지 않은 업데이트 분리
-import { startTransition } from "react";
-
+// 개선: startTransition으로 분리
 function handleClick() {
-  // 버튼 상태는 즉시 반영
   setIsLoading(true);
-
-  // 무거운 리스트 업데이트는 transition으로 분리
   startTransition(() => {
-    const filtered = hugeList.filter(complexFilter).sort(complexSort);
-    setItems(filtered);
+    setItems(hugeList.filter(complexFilter).sort(complexSort));
     setIsLoading(false);
   });
 }
 ```
 
-```tsx
-// 개선 예: 긴 작업을 scheduler API 또는 setTimeout으로 쪼개기
-function processInChunks(items, chunkSize = 100) {
-  let index = 0;
+### 실무 에피소드 — 이런 상황에서 만난다
 
-  function nextChunk() {
-    const chunk = items.slice(index, index + chunkSize);
-    // chunk 처리
-    index += chunkSize;
-    if (index < items.length) {
-      setTimeout(nextChunk, 0); // 메인 스레드에 양보
-    }
-  }
-
-  nextChunk();
-}
-```
-
-### 자주 하는 오해
-
-- 로딩만 빠르면 UX도 좋다 → 틀림
-- 첫 입력만 빠르면 충분하다 → 실제 서비스는 여러 상호작용이 있고, INP는 전체를 본다
-- INP는 프레임워크 쓰면 자동으로 좋아진다 → JS 실행량과 메인 스레드 점유가 중요하다
-- React 18의 concurrent features를 쓰면 INP가 자동으로 해결된다 → `startTransition`은 도움이 되지만, 근본적인 계산량 자체를 줄여야 할 때도 있다
-
-### 실무 연결
-
-INP를 개선하려면:
-
-- 긴 작업 쪼개기 (yield to main thread)
-- `startTransition`으로 긴급/비긴급 업데이트 분리
-- 이벤트 핸들러 안에서 불필요한 동기 작업 제거
-- 렌더 범위 줄이기 (상태를 사용하는 컴포넌트 범위 최소화)
-- Web Worker로 무거운 계산 오프로드
-
-> 이제 응답성 축을 봤다. 그다음엔 화면이 흔들리는 경험을 나타내는 **CLS**로 넘어가야 한다.
+> 필터 드롭다운을 누르면 0.5초 동안 UI가 얼어붙는 현상. DevTools Performance에서 Long Task(800ms)가 보임. 원인은 5000개 상품을 동기적으로 필터+정렬+그룹핑. `startTransition`으로 필터 업데이트를 non-urgent로 분리하고, 정렬/그룹핑은 Web Worker로 옮기니 INP 150ms로 개선.
 
 ### 면접 압축 답변
 
-**10초**: INP는 모든 상호작용 중 가장 느린 응답 시간을 측정하는 지표로, 클릭/입력 후 화면 반응까지의 전체 지연을 봅니다.
-
-**30초**: INP는 사용자가 클릭하거나 입력한 뒤 화면이 실제로 반응하기까지의 지연을 보는 지표입니다. FID가 첫 입력의 지연만 봤다면, INP는 페이지 전체 수명 동안의 모든 상호작용을 보고 가장 느린 쪽을 대표값으로 잡습니다. 개선하려면 긴 JS 작업을 쪼개거나 `startTransition` 같은 우선순위 분리가 필요합니다.
+- **10초**: INP는 모든 상호작용 중 가장 느린 응답 시간을 측정하며, Long Task와 메인 스레드 점유가 핵심 원인입니다.
+- **30초**: INP는 FID와 달리 페이지 전체 수명 동안의 모든 상호작용을 보고 가장 느린 쪽을 대표값으로 잡습니다. 긴 JS 작업을 쪼개거나 `startTransition`으로 우선순위를 분리하고, 무거운 계산은 Web Worker로 오프로드하는 것이 효과적입니다.
 
 ---
 
-## 103. CLS는 왜 "보이긴 하는데 불편한 페이지"를 설명하나
+## 102. CLS — 시각적 안정성
 
-어떤 페이지는 빨리 뜨고, 버튼도 눌린다.
-그런데 읽고 누르려는 순간 요소가 밀리면 체감은 나빠진다.
-이걸 설명하는 대표 지표가 CLS다.
+> **TL;DR** — CLS는 예기치 않은 레이아웃 이동의 누적 점수. 이미지 크기 미지정, 동적 콘텐츠 삽입, 폰트 교체가 주요 원인. 공간을 미리 예약하는 것이 핵심.
 
-### 핵심 개념
+### CLS를 유발하는 원인과 해결
 
-CLS(Cumulative Layout Shift)는 예기치 않은 레이아웃 이동이 얼마나 발생했는지를 나타낸다.
-
-CLS는 **세션 윈도우** 방식으로 계산된다. 최대 5초 길이의 윈도우 안에서 1초 간격 이하로 연속 발생한 레이아웃 이동을 묶어서, 그 중 가장 큰 윈도우의 점수를 보고한다.
-
-사용자가 의도하지 않았는데:
-
-- 버튼이 아래로 밀리거나
-- 이미지 로딩 후 본문이 튀거나
-- 광고 슬롯이 갑자기 공간을 차지하거나
-- 폰트 교체로 줄바꿈이 바뀌는 현상
-
-을 측정한다. 사용자 입력(클릭, 탭 등) 후 500ms 이내에 발생한 레이아웃 이동은 제외된다.
-
-### 왜 이게 중요한가
-
-CLS가 큰 페이지는 단순히 "못생겨 보이는" 수준이 아니라,
-실제 사용 실수를 만들 수 있다.
-
-예:
-
-- 누르려던 버튼 대신 다른 버튼 클릭
-- 읽던 문단 위치를 잃음
-- 입력 중인 폼 위치가 흔들림
-
-### 예시
+| 원인 | 해결 |
+|---|---|
+| 이미지 크기 미지정 | `width`/`height` 또는 `aspect-ratio` 명시 |
+| 광고/배너 삽입 | `min-height`로 공간 예약 |
+| 웹폰트 교체 | `font-display: swap` 또는 `optional` |
+| 동적 UI 삽입 | 삽입 위치에 공간 미리 확보 |
 
 ```html
-<!-- 나쁜 예: width/height 없는 이미지 → 로드 후 레이아웃 밀림 -->
+<!-- 나쁜 예 -->
 <img src="/banner.jpg" alt="banner" />
-```
 
-```html
-<!-- 좋은 예: 크기를 명시하여 공간 예약 -->
+<!-- 좋은 예: 공간 예약 -->
 <img src="/banner.jpg" alt="banner" width="800" height="400" />
+
+<!-- 반응형 대응 -->
+<style>.banner { width: 100%; aspect-ratio: 2/1; object-fit: cover; }</style>
 ```
 
-```css
-/* 또는 aspect-ratio로 반응형 대응 */
-.banner-img {
-  width: 100%;
-  aspect-ratio: 2 / 1;
-  object-fit: cover;
-}
-```
+### 실무 에피소드 — 이런 상황에서 만난다
 
-```css
-/* 폰트 교체로 인한 CLS 방지 */
-@font-face {
-  font-family: "CustomFont";
-  src: url("/fonts/custom.woff2") format("woff2");
-  font-display: swap; /* 또는 optional */
-}
-```
-
-```html
-<!-- 광고/배너 슬롯 공간 미리 확보 -->
-<div style="min-height: 250px;">
-  <!-- 광고가 여기에 삽입됨 -->
-</div>
-```
-
-### 자주 하는 오해
-
-- 조금 움직이는 건 상관없다 → 사용 중 움직이면 큰 불편이 된다
-- 이미지가 늦게 뜨는 것만 CLS다 → 광고, 폰트, 동적 UI 삽입도 포함될 수 있다
-- skeleton이 있으면 CLS는 자동 해결된다 → skeleton의 크기가 실제 콘텐츠 크기와 일치해야 의미가 있다. 공간 예약이 핵심이다
-
-### 실무 연결
-
-CLS를 줄일 때 대표적으로 보는 것:
-
-- 이미지/비디오에 `width`/`height` 또는 `aspect-ratio` 명시
-- 광고/배너 슬롯 공간 미리 확보 (`min-height`)
-- 늦게 삽입되는 UI의 공간 전략
-- 폰트 로딩 전략 검토 (`font-display: swap` 또는 `optional`)
-- 동적으로 DOM에 삽입되는 요소의 위치 고정
-
-> 이제 Core Web Vitals 세 축을 다 봤다. 그다음엔 이걸 **어떻게 측정하는지**, 즉 필드 데이터와 실험실 데이터로 넘어가야 한다.
+> "확인" 버튼을 눌렀는데 "삭제" 버튼이 눌리는 민원. 원인은 버튼 위에 늦게 로드되는 광고 배너가 삽입되면서 버튼이 아래로 밀린 것. 광고 슬롯에 `min-height: 250px`로 공간을 미리 확보하니 CLS 0.35 → 0.04로 개선.
 
 ### 면접 압축 답변
 
-**10초**: CLS는 예기치 않은 레이아웃 이동의 누적 점수를 측정하며, 이미지 크기 미지정이나 동적 콘텐츠 삽입이 주요 원인입니다.
-
-**30초**: CLS는 사용자가 예상하지 않은 레이아웃 이동이 얼마나 발생하는지를 나타내는 지표입니다. 이미지에 `width`/`height`를 명시하고, 광고 슬롯의 공간을 미리 확보하며, 폰트 로딩 전략을 설정하는 것이 대표적인 개선 방법입니다. 세션 윈도우 방식으로 계산되며, 사용자 입력 직후의 이동은 제외됩니다.
-
----
-
-## 104. 필드 데이터와 실험실 데이터는 왜 둘 다 봐야 하나
-
-성능 측정 도구를 보다 보면
-어떤 곳은 실제 사용자 데이터처럼 보이고, 어떤 곳은 로컬 테스트처럼 보인다.
-이 둘을 구분해야 성능 분석이 덜 헷갈린다.
-
-### 핵심 개념
-
-| 구분 | 필드 데이터 (RUM) | 실험실 데이터 (Lab) |
-|------|-------------------|---------------------|
-| 수집 환경 | 실제 사용자 브라우저 | 통제된 테스트 환경 |
-| 대표 도구 | CrUX, PageSpeed Insights, web-vitals 라이브러리 | Lighthouse, Chrome DevTools, WebPageTest |
-| 장점 | 실제 기기/네트워크/지역 반영 | 재현 쉬움, 디버깅 편함, 전후 비교 가능 |
-| 단점 | 디버깅 어려움, 충분한 데이터 필요 | 실제 사용자 환경과 다를 수 있음 |
-| 측정 가능 지표 | LCP, INP, CLS 모두 | LCP, CLS (INP는 실제 상호작용 필요) |
-
-### 왜 이게 중요한가
-
-둘을 같이 봐야 하는 이유:
-
-- Lighthouse에서 90점인데 실제 사용자는 느리다고 느낄 수 있다 (기기/네트워크 차이)
-- 필드에서 CLS가 나쁜데 로컬에선 재현이 안 될 수 있다 (광고, A/B 테스트 등)
-- 실험실에서만 개선을 확인하면 실제 효과가 다를 수 있다
-
-### 예시: web-vitals 라이브러리로 필드 데이터 수집
-
-```tsx
-// web-vitals 라이브러리로 실사용자 성능 데이터 수집
-import { onLCP, onINP, onCLS } from "web-vitals";
-
-onLCP((metric) => {
-  console.log("LCP:", metric.value, metric.entries);
-  // 분석 서비스로 전송
-  sendToAnalytics({ name: "LCP", value: metric.value });
-});
-
-onINP((metric) => {
-  console.log("INP:", metric.value, metric.entries);
-  sendToAnalytics({ name: "INP", value: metric.value });
-});
-
-onCLS((metric) => {
-  console.log("CLS:", metric.value, metric.entries);
-  sendToAnalytics({ name: "CLS", value: metric.value });
-});
-```
-
-### 자주 하는 오해
-
-- Lighthouse만 보면 충분하다 → 실제 사용자 환경과 다를 수 있다
-- 실제 데이터만 보면 된다 → 디버깅과 재현이 어렵다
-- 둘 중 하나가 더 진짜다 → 목적이 다르다
-
-### 실무 연결
-
-좋은 분석 흐름은 보통 이렇다.
-
-1. 필드 데이터에서 실제 문제를 본다 (CrUX, PageSpeed Insights, RUM)
-2. 로컬/DevTools/Lighthouse에서 재현한다
-3. 원인을 찾아 수정한다
-4. 배포 후 다시 필드 데이터로 개선 여부를 확인한다
-
-> 이제 측정 체계를 봤다. 그다음엔 실제로 프론트엔드가 가장 자주 만지는 성능 축, 즉 **번들 크기와 코드 스플리팅**으로 넘어간다.
-
-### 면접 압축 답변
-
-**10초**: 필드 데이터는 실사용자 환경을 반영하고 실험실 데이터는 재현과 디버깅에 유리해서, 성능 분석은 둘을 함께 봐야 합니다.
-
-**30초**: 필드 데이터는 실제 사용자 환경을 반영하고, 실험실 데이터는 재현과 디버깅에 유리합니다. 보통 CrUX나 web-vitals 같은 RUM 도구로 문제를 발견한 뒤, Lighthouse나 DevTools에서 원인을 재현하고 수정하는 방식으로 함께 사용합니다. Lighthouse 점수가 좋아도 실제 사용자 체감은 다를 수 있으므로 필드 데이터 확인이 필수입니다.
+- **10초**: CLS는 예기치 않은 레이아웃 이동의 누적 점수이며, 이미지 크기 명시와 공간 예약이 핵심 해결책입니다.
+- **30초**: CLS는 이미지에 `width`/`height`를 명시하고, 광고 슬롯의 공간을 미리 확보하며, 폰트 로딩 전략을 설정하는 것이 대표적인 개선 방법입니다. 사용자 입력 후 500ms 이내의 이동은 제외되며, skeleton도 실제 콘텐츠와 크기가 일치해야 의미가 있습니다.
 
 ---
 
-## 104-1. 브라우저 렌더링 파이프라인
+## 103. 브라우저 렌더링 파이프라인 — Reflow, Repaint, Composite
 
-성능을 이야기하면서 "reflow가 비싸다", "transform이 더 빠르다" 같은 말을 자주 듣는다.
-이걸 제대로 이해하려면 브라우저가 HTML을 받은 뒤 화면에 픽셀을 그리기까지의 전체 과정을 알아야 한다.
+> **TL;DR** — 브라우저는 DOM → CSSOM → 렌더 트리 → Layout(Reflow) → Paint → Composite 순으로 화면을 그린다. Reflow는 비싸고, `transform`/`opacity` 애니메이션은 Composite만 발생해서 저렴하다.
 
-### 핵심 개념 — 렌더링 파이프라인
-
-브라우저는 아래 단계를 거쳐 화면을 그린다.
+### 파이프라인
 
 ```
-HTML 파싱 → DOM 트리
-CSS 파싱 → CSSOM 트리
-DOM + CSSOM → 렌더 트리 (Render Tree)
-→ Layout (Reflow): 위치와 크기 계산
-→ Paint: 픽셀 채우기
-→ Composite: GPU 레이어 합성
+HTML → DOM 트리
+CSS → CSSOM 트리
+DOM + CSSOM → 렌더 트리
+  → Layout (Reflow): 위치/크기 계산 — 비쌈!
+    → Paint: 픽셀 채우기
+      → Composite: GPU 레이어 합성 — 가장 저렴
 ```
 
-각 단계를 좀 더 보면:
+### Reflow vs Repaint vs Composite
 
-1. **HTML 파싱 → DOM 트리**: HTML 문서를 파싱하여 DOM(Document Object Model) 트리를 구성한다
-2. **CSS 파싱 → CSSOM 트리**: CSS를 파싱하여 CSSOM(CSS Object Model) 트리를 구성한다
-3. **렌더 트리 (Render Tree)**: DOM과 CSSOM을 결합하여 실제로 화면에 표시될 요소만 포함하는 렌더 트리를 만든다. `display: none`인 요소는 렌더 트리에 포함되지 않는다
-4. **Layout (Reflow)**: 렌더 트리의 각 노드의 정확한 위치와 크기를 계산한다. "이 요소가 화면에서 어디에, 얼마나 크게 들어가는가"를 정하는 단계다
-5. **Paint**: 계산된 레이아웃을 기반으로 실제 픽셀을 채운다. 색상, 텍스트, 그림자, 보더 등을 그린다
-6. **Composite**: 여러 레이어를 GPU에서 합성하여 최종 화면을 만든다. `transform`, `opacity` 등은 이 단계에서만 처리될 수 있다
-
-### Reflow vs Repaint
-
-| 구분 | Reflow (Layout) | Repaint |
-|------|-----------------|---------|
-| 의미 | 요소의 위치/크기가 바뀌어 레이아웃을 다시 계산 | 시각적 속성만 바뀌어 다시 그림 |
-| 비용 | **비싸다** (하위 요소까지 연쇄적으로 재계산) | 상대적으로 저렴 |
-| 트리거 예시 | width, height, margin, padding, font-size, DOM 삽입/삭제 | color, background-color, visibility, box-shadow |
-| 관계 | Reflow가 발생하면 Repaint도 함께 발생 | Repaint만 단독 발생 가능 |
-
-### Reflow를 트리거하는 대표적인 상황
-
-- `width`, `height`, `margin`, `padding`, `border` 변경
-- DOM 요소 추가/삭제
-- `font-size`, `font-family` 변경
-- 윈도우 리사이즈
-- `offsetWidth`, `offsetHeight`, `getBoundingClientRect()` 등 레이아웃 속성 읽기 (강제 동기 레이아웃)
-- `display`, `position`, `float` 변경
-
-### Reflow를 최소화하는 방법
-
-```tsx
-// 나쁜 예: DOM 읽기/쓰기를 번갈아 하면 강제 동기 레이아웃 발생
-elements.forEach((el) => {
-  const height = el.offsetHeight; // 읽기 → 강제 layout
-  el.style.height = height + 10 + "px"; // 쓰기 → layout 무효화
-  // 다음 루프에서 다시 읽기 → 또 강제 layout...
-});
-
-// 좋은 예: 읽기를 먼저 모아서 하고, 쓰기를 나중에 모아서 한다
-const heights = elements.map((el) => el.offsetHeight); // 읽기 일괄
-elements.forEach((el, i) => {
-  el.style.height = heights[i] + 10 + "px"; // 쓰기 일괄
-});
-```
+| | Reflow | Repaint | Composite Only |
+|---|---|---|---|
+| **트리거** | width, height, margin, DOM 추가/삭제 | color, background, visibility | transform, opacity |
+| **비용** | 높음 (하위 요소 연쇄 재계산) | 중간 | 낮음 (GPU) |
+| **관계** | Reflow → Repaint → Composite | Repaint → Composite | Composite만 |
 
 ```css
-/* 나쁜 예: top/left 애니메이션 → 매 프레임 reflow */
-.box {
-  transition: top 0.3s, left 0.3s;
-}
+/* 나쁜 예: top/left → 매 프레임 reflow */
+.box { transition: top 0.3s, left 0.3s; }
 
-/* 좋은 예: transform 애니메이션 → composite 단계에서 처리, reflow 없음 */
-.box {
-  transition: transform 0.3s;
-}
-/* top: 100px 대신 */
+/* 좋은 예: transform → composite만 */
+.box { transition: transform 0.3s; }
 /* transform: translateY(100px) 사용 */
 ```
 
-```css
-/* will-change로 브라우저에게 변경 예고 → 별도 레이어로 승격 */
-.animated-element {
-  will-change: transform, opacity;
-}
-/* 주의: 남용하면 메모리 소모가 커지므로 실제 애니메이션 요소에만 사용 */
+```js
+// 나쁜 예: DOM 읽기/쓰기 번갈아 → 강제 동기 레이아웃
+elements.forEach((el) => {
+  const h = el.offsetHeight;        // 읽기 → 강제 layout
+  el.style.height = h + 10 + "px";  // 쓰기 → layout 무효화
+});
+
+// 좋은 예: 읽기 일괄 → 쓰기 일괄
+const heights = elements.map((el) => el.offsetHeight);
+elements.forEach((el, i) => { el.style.height = heights[i] + 10 + "px"; });
 ```
 
-### 왜 이게 중요한가
+### 실무 에피소드 — 이런 상황에서 만난다
 
-이 파이프라인을 이해하면:
-
-- 왜 `transform`이 `top`/`left`보다 애니메이션에 유리한지 (composite만 발생)
-- 왜 DOM 읽기/쓰기를 섞으면 느린지 (강제 동기 레이아웃)
-- 왜 `will-change`가 특정 상황에서 성능을 개선하는지 (레이어 분리)
-- 왜 CSS 속성에 따라 렌더링 비용이 다른지
-
-설명할 수 있다.
-
-### 자주 하는 오해
-
-- DOM 조작은 다 똑같이 비싸다 → 속성에 따라 reflow, repaint, composite 중 어디까지 발생하는지가 다르다
-- 애니메이션은 CSS든 JS든 비용이 같다 → `transform`/`opacity` 애니메이션은 GPU에서 composite만 하므로 훨씬 저렴하다
-- `will-change`를 다 걸면 빨라진다 → 불필요한 레이어 생성으로 오히려 메모리가 늘어난다
-- React를 쓰면 reflow를 신경 안 써도 된다 → React의 Virtual DOM은 실제 DOM 조작을 최소화하지만, 최종적으로 DOM이 변경되면 브라우저 렌더링 파이프라인을 그대로 거친다
+> 카드 호버 애니메이션이 저사양 모바일에서 끊김. `margin-top`으로 구현되어 매 프레임 reflow 발생. `transform: translateY()`로 바꾸니 composite만 발생해서 60fps 유지.
 
 ### 면접 압축 답변
 
-**10초**: 브라우저는 DOM → CSSOM → 렌더 트리 → Layout → Paint → Composite 순으로 화면을 그리며, reflow는 레이아웃 재계산이라 비싸고 repaint는 시각적 변경만 처리합니다.
-
-**30초**: 브라우저는 HTML과 CSS를 파싱해 DOM과 CSSOM을 만들고, 이를 결합한 렌더 트리에서 Layout(위치/크기 계산), Paint(픽셀 그리기), Composite(레이어 합성) 단계를 거칩니다. Reflow는 기하학적 속성 변경 시 레이아웃을 다시 계산하므로 비용이 크고, repaint는 색상 같은 시각적 변경만 다시 그립니다. 애니메이션에는 `transform`과 `opacity`를 사용하면 composite 단계에서만 처리되어 reflow를 피할 수 있고, DOM 읽기/쓰기를 분리하면 강제 동기 레이아웃을 방지할 수 있습니다.
+- **10초**: 브라우저는 Layout → Paint → Composite 순으로 화면을 그리며, `transform`/`opacity` 애니메이션은 composite만 발생해 reflow를 피합니다.
+- **30초**: Reflow는 기하학적 속성 변경 시 레이아웃을 다시 계산하므로 비용이 크고, `transform`과 `opacity`는 composite 단계에서만 처리되어 reflow를 피합니다. DOM 읽기/쓰기를 번갈아 하면 강제 동기 레이아웃이 발생하므로, 읽기를 먼저 일괄 처리하고 쓰기를 나중에 일괄 처리하는 패턴이 좋습니다.
 
 ---
 
-## 105. 번들 크기는 왜 여전히 중요한가
+## 104. 번들 크기와 코드 스플리팅
 
-요즘은 네트워크도 빨라지고 브라우저도 좋아졌지만,
-번들 크기는 여전히 중요하다.
-이유는 단순 다운로드 때문만이 아니다.
+> **TL;DR** — 번들 크기는 다운로드뿐 아니라 파싱/컴파일/실행 비용에 영향. 저사양 기기에서 체감 차이가 크다. 코드 스플리팅으로 초기 필요 코드만 먼저 보내고 나머지는 늦춘다.
 
-### 핵심 개념
+### 번들이 큰 게 왜 문제인가
 
-큰 번들은 아래 비용을 함께 만든다.
-
-- **다운로드 비용**: 전송량 증가
-- **파싱 비용**: 브라우저가 JS를 파싱하는 시간
-- **컴파일 비용**: V8 엔진이 바이트코드로 변환하는 시간
-- **실행 비용**: 코드 실행 자체의 CPU 시간
-- **hydration 비용 증가**: SSR 후 클라이언트에서 이벤트 바인딩하는 비용
-- **메인 스레드 점유 증가**: 위 모든 과정이 메인 스레드에서 일어남
-
-### 왜 이게 중요한가
-
-특히 모바일/저사양 기기에선
-"다운로드는 빨랐는데 실행이 느린" 경우가 많다.
-
-예를 들어 1MB의 JS 파일을:
-
-- 고성능 데스크톱에서 파싱/실행하면 ~100ms
-- 저사양 모바일에서 파싱/실행하면 ~1000ms 이상
-
-즉 번들 문제는:
-
-- 로딩 문제
-- INP 문제
-- 초기 상호작용 지연
-으로 이어질 수 있다.
-
-### 예시: 번들 분석
+같은 1MB JS를 고성능 데스크톱에서 파싱/실행하면 ~100ms, 저사양 모바일에서는 ~1000ms+. **gzip은 전송 크기만 줄이지 실행 크기는 그대로.**
 
 ```bash
-# webpack 번들 분석
-npx webpack-bundle-analyzer stats.json
-
-# Next.js 번들 분석
-ANALYZE=true next build
-
-# vite 번들 분석
-npx vite-bundle-visualizer
+# 번들 분석
+npx webpack-bundle-analyzer stats.json  # webpack
+ANALYZE=true next build                   # Next.js
+npx vite-bundle-visualizer                # Vite
 ```
 
-```tsx
-// 나쁜 예: 전체 lodash import (약 70KB minified, ~25KB gzipped)
-import _ from "lodash";
-const result = _.get(obj, "a.b.c");
+### 코드 스플리팅 — 현재 필요한 코드만 먼저
 
-// 좋은 예: 필요한 함수만 import (약 2KB gzipped)
-import get from "lodash/get";
-const result = get(obj, "a.b.c");
-
-// 더 좋은 예: 네이티브로 대체 가능하면 라이브러리 자체를 제거
-const result = obj?.a?.b?.c;
-```
-
-### 자주 하는 오해
-
-- 네트워크만 빠르면 번들 크기는 상관없다 → 파싱/실행 비용도 크다
-- gzip/brotli가 있으니 문제 없다 → 압축은 전송 크기만 줄이고, 실행 크기는 그대로다
-- 프레임워크가 알아서 최적화해준다 → 앱 코드와 서드파티 의존성 영향이 크다
-
-### 실무 연결
-
-번들 크기가 커지는 흔한 원인:
-
-- 큰 유틸 라이브러리 전체 import (lodash, moment 등)
-- 필요 없는 polyfill
-- 무거운 차트/에디터 라이브러리
-- 페이지 전역에 불필요한 클라이언트 코드 포함
-- `'use client'` 경계 과도 확장
-- 번들 분석 없이 의존성 추가하는 습관
-
-> 이제 번들 자체의 비용을 봤다. 그다음엔 이걸 한 번에 다 보내지 않도록 나누는 **코드 스플리팅**으로 넘어가야 한다.
-
-### 면접 압축 답변
-
-**10초**: 번들 크기는 다운로드뿐 아니라 파싱, 컴파일, 실행 비용에도 영향을 주며, 특히 저사양 기기에서 체감이 큽니다.
-
-**30초**: 번들 크기는 다운로드뿐 아니라 파싱, 실행, hydration 비용에도 영향을 주기 때문에 여전히 중요합니다. gzip은 전송 크기만 줄이지 실행 크기는 그대로이고, 같은 번들도 저사양 모바일에선 파싱/실행에 10배 이상 걸릴 수 있습니다. 번들 분석 도구로 어떤 의존성이 크기를 차지하는지 주기적으로 확인하는 것이 좋습니다.
-
----
-
-## 106. 코드 스플리팅은 왜 "덜 보내기" 이상의 의미가 있나
-
-코드 스플리팅을 단순히 "파일 쪼개기"로 이해하면 반만 맞다.
-핵심은 **현재 꼭 필요한 코드만 먼저 보내고, 나머지는 늦추는 것**이다.
-
-### 핵심 개념
-
-코드 스플리팅은 자바스크립트를 의미 단위로 나눠서
-초기 로드에 꼭 필요하지 않은 코드를 뒤로 미루는 전략이다.
-
-스플리팅이 일어나는 대표적인 지점:
-
-- **라우트 단위**: 페이지별로 번들 분리 (대부분 프레임워크가 자동 처리)
-- **컴포넌트 단위**: 무거운 개별 컴포넌트를 동적 import
-- **라이브러리 단위**: 특정 기능에서만 쓰는 무거운 라이브러리 분리
-
-### 왜 이게 중요한가
-
-이걸 통해 줄일 수 있는 건:
-
-- 초기 다운로드량
-- 초기 파싱/실행량
-- 초기 hydration 부담
-
-즉 단순 전송량 감소를 넘어서,
-**초기 상호작용 가능 시점**에도 영향을 준다.
-
-### 예시
+| 분리 단위 | 방법 | 예시 |
+|---|---|---|
+| 라우트 | 프레임워크 자동 | Next.js 페이지별 번들 |
+| 컴포넌트 | `React.lazy` + Suspense / `next/dynamic` | 차트, 에디터 |
+| 기능 | 이벤트 기반 `import()` | PDF 내보내기, 결제 모듈 |
 
 ```tsx
-// React.lazy + Suspense (React 기본)
-import { lazy, Suspense } from "react";
-
+// React.lazy + Suspense
 const HeavyChart = lazy(() => import("./HeavyChart"));
+<Suspense fallback={<p>차트 로딩...</p>}><HeavyChart /></Suspense>
 
-function Dashboard() {
-  return (
-    <Suspense fallback={<p>차트 불러오는 중...</p>}>
-      <HeavyChart />
-    </Suspense>
-  );
-}
-```
+// Next.js dynamic (SSR 제외 옵션)
+const HeavyChart = dynamic(() => import("./HeavyChart"), { ssr: false });
 
-```tsx
-// Next.js dynamic import
-import dynamic from "next/dynamic";
-
-const HeavyChart = dynamic(() => import("./HeavyChart"), {
-  ssr: false,
-  loading: () => <p>차트 불러오는 중...</p>,
-});
-```
-
-```tsx
-// 이벤트 기반 동적 import (클릭 시에만 로드)
+// 이벤트 기반 (클릭 시에만 로드)
 async function handleExport() {
   const { exportToPDF } = await import("./pdfExporter");
   exportToPDF(data);
 }
 ```
 
-### 자주 하는 오해
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- 페이지를 나누면 자동으로 충분하다 → 컴포넌트/기능 단위 분리가 더 필요할 수 있다
-- 동적 import만 쓰면 끝이다 → 실제로 언제 로드되는지 봐야 한다
-- 작게 쪼갤수록 무조건 좋다 → 요청 수와 복잡도도 같이 본다. HTTP/2에서는 여러 요청이 병렬 처리되지만, 너무 잘게 쪼개면 오히려 오버헤드가 생길 수 있다
-
-### 실무 연결
-
-코드 스플리팅이 잘 맞는 대상:
-
-- 차트
-- WYSIWYG 에디터
-- 지도
-- 관리자 전용 기능
-- 자주 열리지 않는 모달
-- 대형 드래그 앤 드롭 모듈
-- PDF 생성/내보내기 기능
-
-> 이제 JS 코드 양을 나누는 전략을 봤다. 그다음엔 실제 초기 화면에서 가장 큰 용량을 차지하는 경우가 많은 **이미지 최적화**로 넘어가야 한다.
+> 번들 분석을 돌려보니 `moment.js`가 300KB를 차지. `date-fns`로 교체하고 필요한 함수만 import하니 번들이 280KB 감소. 추가로 차트 라이브러리를 `dynamic(() => import(...), { ssr: false })`로 분리하니 초기 JS가 40% 줄어듦.
 
 ### 면접 압축 답변
 
-**10초**: 코드 스플리팅은 초기 화면에 필요하지 않은 코드를 뒤로 미뤄 첫 렌더와 상호작용 부담을 줄이는 전략입니다.
-
-**30초**: 코드 스플리팅은 자바스크립트를 단순히 쪼개는 것이 아니라, 초기 화면에 꼭 필요하지 않은 코드를 뒤로 미뤄 첫 렌더와 초기 상호작용 부담을 줄이는 전략입니다. React의 `lazy`/`Suspense`나 Next.js의 `dynamic`으로 컴포넌트 단위 분리를 하거나, 이벤트 기반 동적 import로 특정 기능을 필요한 시점에만 로드할 수 있습니다.
+- **10초**: 번들 크기는 다운로드뿐 아니라 파싱/실행 비용에 영향을 주며, 코드 스플리팅으로 초기 필요 코드만 먼저 보냅니다.
+- **30초**: 번들 크기는 특히 저사양 모바일에서 파싱/실행 비용이 크고, gzip은 전송만 줄입니다. 번들 분석 도구로 병목을 찾고, 라우트/컴포넌트/기능 단위로 코드 스플리팅하며, 무거운 라이브러리는 가벼운 대안으로 교체하거나 동적 import로 지연 로딩합니다.
 
 ---
 
-## 107. 이미지 최적화는 왜 LCP와 가장 자주 연결되나
+## 105. 이미지 최적화와 Lazy Loading
 
-대부분의 실제 서비스에서 첫 화면의 가장 큰 요소는 이미지인 경우가 많다.
-그래서 이미지 최적화는 성능 얘기에서 거의 빠지지 않는다.
+> **TL;DR** — 이미지는 LCP 후보이자 CLS 원인. 적절한 크기/포맷/우선순위/공간 예약을 함께 설계한다. Lazy loading은 fold 아래에만 — LCP 이미지에 걸면 악화.
 
-### 핵심 개념
+### 이미지 최적화 체크리스트
 
-이미지 최적화는 단순히 파일 용량만 줄이는 게 아니다.
-
-- **적절한 크기 제공**: 뷰포트에 맞는 해상도만 전달
-- **적절한 포맷 사용**: WebP, AVIF 등 modern format
-- **필요한 해상도만 전달**: `srcset`과 `sizes`로 기기별 분기
-- **우선순위 조정**: LCP 이미지는 `fetchpriority="high"`
-- **레이아웃 공간 예약**: `width`/`height` 또는 `aspect-ratio`로 CLS 방지
-
-### 왜 이게 중요한가
-
-이미지는:
-
-- 다운로드 비용이 크고
-- LCP 후보가 되기 쉽고
-- 크기 미지정 시 CLS까지 만들 수 있다
-
-즉 한 자산이 로딩과 시각 안정성 두 문제를 동시에 만들 수 있다.
-
-### 예시
+| 항목 | 방법 |
+|---|---|
+| 포맷 | WebP/AVIF 사용 |
+| 크기 | `srcset`/`sizes`로 기기별 분기 |
+| 우선순위 | LCP 이미지에 `fetchpriority="high"` |
+| 공간 예약 | `width`/`height` 또는 `aspect-ratio` |
+| Lazy loading | fold **아래**에만 `loading="lazy"` |
 
 ```html
-<!-- 반응형 이미지: 기기별 최적 크기 제공 -->
-<img
-  src="/hero-800.jpg"
-  srcset="/hero-400.jpg 400w, /hero-800.jpg 800w, /hero-1200.jpg 1200w"
-  sizes="(max-width: 600px) 400px, (max-width: 1000px) 800px, 1200px"
-  width="1200"
-  height="600"
-  alt="hero"
-/>
-```
-
-```html
-<!-- picture 요소로 modern format 제공 -->
+<!-- 반응형 + modern format -->
 <picture>
   <source srcset="/hero.avif" type="image/avif" />
   <source srcset="/hero.webp" type="image/webp" />
-  <img src="/hero.jpg" alt="hero" width="1200" height="600" />
+  <img src="/hero.jpg" alt="hero" width="1200" height="600" fetchpriority="high" />
 </picture>
+
+<!-- fold 아래 이미지만 lazy -->
+<img src="/review.jpg" loading="lazy" alt="review" width="400" height="300" />
 ```
 
 ```tsx
-// Next.js Image 컴포넌트: 자동 최적화
-import Image from "next/image";
-
-<Image
-  src="/hero.jpg"
-  alt="hero"
-  width={1200}
-  height={600}
-  priority          // LCP 이미지일 때
-  placeholder="blur" // 블러 플레이스홀더로 체감 개선
-/>
+// Next.js Image
+<Image src="/hero.jpg" alt="hero" width={1200} height={600} priority placeholder="blur" />
 ```
 
-### 자주 하는 오해
+### Lazy Loading — 언제 유용하고 언제 해로운가
 
-- 화질만 조금 줄이면 끝이다 → 크기, 우선순위, 반응형 제공이 더 중요할 수 있다
-- lazy loading은 이미지엔 무조건 좋다 → LCP 이미지엔 부적절할 수 있다
-- `width`/`height`는 예전 방식이다 → CLS 방지에 여전히 중요하다
-- SVG는 최적화 필요 없다 → 복잡한 SVG는 렌더링 비용이 클 수 있다
+| 유용 | 해로움 |
+|---|---|
+| fold 아래 이미지 | LCP 이미지 (hero image) |
+| 늦게 열리는 모달 내부 | 첫 화면 CTA 이미지 |
+| 긴 페이지 하단 | 초기 상호작용에 필요한 코드 |
 
-### 실무 연결
+### 실무 에피소드 — 이런 상황에서 만난다
 
-이미지 최적화 체크리스트:
-
-- [ ] LCP 이미지에 `priority` 또는 `fetchpriority="high"` 설정
-- [ ] fold 아래 이미지에만 `loading="lazy"` 적용
-- [ ] `width`/`height` 또는 `aspect-ratio` 명시
-- [ ] WebP/AVIF 등 modern format 사용
-- [ ] `srcset`/`sizes`로 반응형 이미지 제공
-- [ ] CDN을 통한 이미지 서빙
-
-> 이제 이미지 최적화의 이유를 봤다. 그다음엔 이를 실제로 늦게 불러오는 전략인 **lazy loading**을 언제 써야 하고 언제 피해야 하는지로 넘어가야 한다.
+> 모든 이미지에 `loading="lazy"`를 일괄 적용했는데 오히려 LCP가 나빠짐. LCP 후보인 히어로 이미지까지 lazy가 걸려서 뷰포트에 가까워질 때까지 요청이 안 나간 것. 히어로 이미지만 `fetchpriority="high"` + lazy 제거, 나머지는 lazy 유지로 개선.
 
 ### 면접 압축 답변
 
-**10초**: 이미지 최적화는 크기/포맷/우선순위/공간 예약을 함께 설계하는 것이며, LCP와 CLS에 동시에 영향을 줍니다.
-
-**30초**: 이미지 최적화는 파일 용량을 줄이는 것만이 아니라, 적절한 크기와 modern format(WebP, AVIF), 우선순위, 레이아웃 공간 예약을 함께 설계하는 것입니다. 이미지는 LCP 후보가 되기 쉽고 크기 미지정 시 CLS까지 유발할 수 있어서, `srcset`/`sizes`로 반응형 제공을 하고, LCP 이미지에는 `fetchpriority="high"`를 설정하는 것이 중요합니다.
-
----
-
-## 108. Lazy loading은 언제 유용하고, 언제 오히려 해가 되나
-
-lazy loading은 매우 유용한 도구지만,
-무조건 붙이는 습관은 오히려 성능을 해칠 수 있다.
-
-### 핵심 개념
-
-lazy loading은
-현재 화면에 꼭 필요하지 않은 리소스를 나중에 로드하게 하는 전략이다.
-
-즉 "지금 안 보여도 되는 것"을 늦추는 데 적합하다.
-
-브라우저 네이티브 lazy loading (`loading="lazy"`)은 뷰포트에 가까워질 때 로드를 시작한다. 정확한 임계값은 브라우저마다, 네트워크 상태마다 다르다.
-
-### 왜 이게 중요한가
-
-이 전략은:
-
-- 초기 다운로드량 감소
-- 초기 렌더 부담 감소
-- 스크롤 아래 리소스 지연 로딩
-
-에 도움을 줄 수 있다.
-
-하지만 반대로,
-초기 화면의 핵심 요소에 lazy loading을 걸면:
-
-- 리소스 요청 발견이 늦어지고
-- LCP가 악화될 수 있다
-
-### 자주 하는 오해
-
-- lazy loading은 무조건 성능 최적화다 → 틀림
-- 모든 이미지에 걸면 좋다 → 틀림
-- 코드도 이미지도 다 늦출수록 좋다 → 사용자 목적과 첫 화면 중요도를 봐야 한다
-- `loading="lazy"`만 걸면 알아서 최적화된다 → LCP 이미지에 걸면 오히려 성능이 나빠진다
-
-### 실무 연결
-
-보통 잘 맞는 경우:
-
-- fold 아래 이미지
-- 늦게 열리는 모달 내부 컴포넌트
-- 후기 탭, 차트 탭, 관리자용 패널
-- 긴 페이지 하단 섹션
-
-반대로 조심할 경우:
-
-- hero image (LCP 후보)
-- 첫 화면 CTA와 직결된 핵심 콘텐츠
-- 초기 상호작용에 꼭 필요한 코드
-
-```tsx
-// 실무 패턴: 뷰포트 기준으로 lazy 여부 결정
-// fold 위 이미지
-<img src="/hero.jpg" fetchpriority="high" alt="hero" />
-
-// fold 아래 이미지
-<img src="/review-1.jpg" loading="lazy" alt="review" />
-```
-
-> 이제 리소스를 늦추는 전략을 봤다. 그다음엔 반대로 **초기에 로딩을 막는 요소**, 즉 렌더 차단 리소스로 넘어가야 한다.
-
-### 면접 압축 답변
-
-**10초**: Lazy loading은 fold 아래 리소스에 유용하지만, LCP 이미지 같은 핵심 리소스에 적용하면 오히려 성능이 나빠집니다.
-
-**30초**: Lazy loading은 현재 화면에 꼭 필요하지 않은 리소스를 나중에 불러오는 전략이라 초기 로드 최적화에 유용합니다. 하지만 첫 화면 핵심 리소스, 특히 LCP 이미지에 적용하면 브라우저의 리소스 발견이 늦어져 성능이 나빠질 수 있습니다. fold 위/아래를 기준으로 lazy 여부를 결정하는 것이 기본 원칙입니다.
+- **10초**: 이미지 최적화는 크기/포맷/우선순위/공간 예약을 함께 설계하며, lazy loading은 LCP 이미지를 제외하고 fold 아래에만 적용합니다.
+- **30초**: 이미지는 LCP 후보이자 CLS 원인이므로 `srcset`/`sizes`로 반응형 제공, WebP/AVIF로 포맷 최적화, `width`/`height`로 공간 예약을 합니다. LCP 이미지에는 `fetchpriority="high"`를, fold 아래에만 `loading="lazy"`를 적용합니다. 전체 일괄 lazy는 LCP를 악화시킵니다.
 
 ---
 
-## 109. 렌더 차단 리소스는 왜 첫 화면을 늦추나
+## 106. 렌더 차단 리소스와 메인 스레드 점유
 
-사용자는 HTML을 받았다고 바로 화면을 다 보는 게 아니다.
-브라우저는 그 뒤에도 CSS와 JS의 영향을 받는다.
+> **TL;DR** — CSS는 렌더를 차단하고 동기 스크립트는 파싱을 차단한다. `defer`/`async`와 Critical CSS로 첫 화면을 앞당기고, Long Task는 쪼개거나 Web Worker로 오프로드한다.
 
-### 핵심 개념
+### 스크립트 로딩 전략
 
-렌더 차단 리소스는
-브라우저가 중요한 화면 표시를 시작하기 전에 기다리게 만드는 자원이다.
-
-대표적으로:
-
-- **CSS**: 기본적으로 렌더를 차단한다. 브라우저는 CSSOM을 완성해야 렌더 트리를 만들 수 있다.
-- **동기 스크립트** (`<script>` without `async`/`defer`): HTML 파싱을 멈추고 스크립트를 다운로드/실행한 뒤에야 파싱을 재개한다.
-
-### 스크립트 로딩 전략 비교
-
-```html
-<!-- 동기 (렌더 차단): HTML 파싱을 멈추고 실행 -->
-<script src="/app.js"></script>
-
-<!-- async: 다운로드는 병렬, 다운로드 끝나면 즉시 실행 (파싱 중단) -->
-<!-- 실행 순서 보장 안 됨. 분석/광고 스크립트에 적합 -->
-<script src="/analytics.js" async></script>
-
-<!-- defer: 다운로드는 병렬, HTML 파싱 완료 후 순서대로 실행 -->
-<!-- DOM에 의존하는 스크립트에 적합 -->
-<script src="/app.js" defer></script>
-```
-
-| 속성 | 다운로드 시점 | 실행 시점 | 실행 순서 보장 | HTML 파싱 차단 |
-|------|-------------|----------|---------------|---------------|
+| 속성 | 다운로드 | 실행 시점 | 순서 보장 | 파싱 차단 |
+|---|---|---|---|---|
 | (없음) | 즉시 | 즉시 | O | O |
 | `async` | 병렬 | 다운로드 완료 시 | X | 실행 중만 |
 | `defer` | 병렬 | DOMContentLoaded 전 | O | X |
 
-### 왜 이게 중요한가
-
-이걸 이해해야:
-
-- HTML은 빨리 왔는데 화면이 늦게 보이는 이유
-- CSS 크기와 순서가 왜 중요한지
-- 스크립트 로딩 전략이 왜 첫 화면 체감과 연결되는지
-
-설명할 수 있다.
-
-### 예시: Critical CSS 인라인
+### Critical CSS
 
 ```html
 <head>
-  <!-- Critical CSS: 첫 화면에 꼭 필요한 스타일만 인라인 -->
-  <style>
-    .hero { display: flex; align-items: center; min-height: 80vh; }
-    .hero-title { font-size: 2.5rem; font-weight: bold; }
-  </style>
-
-  <!-- 나머지 CSS는 비동기 로드 -->
-  <link rel="preload" href="/styles/full.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
-  <noscript><link rel="stylesheet" href="/styles/full.css" /></noscript>
+  <!-- 첫 화면 필수 스타일만 인라인 -->
+  <style>.hero { display: flex; min-height: 80vh; }</style>
+  <!-- 나머지는 비동기 로드 -->
+  <link rel="preload" href="/styles/full.css" as="style"
+        onload="this.onload=null;this.rel='stylesheet'" />
 </head>
 ```
 
-### 자주 하는 오해
+### 메인 스레드 점유 — INP와의 연결
 
-- HTML만 빨리 보내면 된다 → CSS/JS가 화면 표시를 늦출 수 있다
-- 스크립트는 다 끝에 두면 된다 → `defer`를 쓰면 `<head>`에 둬도 파싱을 막지 않는다. 위치보다 로딩 전략이 중요하다
-- CSS는 어차피 작아서 문제 없다 → 크리티컬 CSS 여부가 중요할 수 있다
-- `async`와 `defer`는 같다 → 실행 시점과 순서 보장이 다르다
-
-### 실무 연결
-
-대표 전략:
-
-- Critical CSS 인라인 + 나머지 비동기 로드
-- `defer`로 메인 스크립트 로드
-- `async`로 분석/광고 스크립트 로드
-- 서드파티 스크립트 최소화 또는 지연
-- 초기 화면에 불필요한 스타일/스크립트 분리
-
-> 이제 첫 화면을 늦추는 정적 자원 문제를 봤다. 그다음엔 JS가 실제 실행될 때 메인 스레드를 얼마나 오래 점유하는지로 넘어가야 한다.
-
-### 면접 압축 답변
-
-**10초**: 렌더 차단 리소스는 CSS와 동기 스크립트가 대표적이며, `defer`/`async`와 Critical CSS 분리로 첫 화면 표시를 앞당길 수 있습니다.
-
-**30초**: 렌더 차단 리소스는 브라우저가 실제 화면 표시를 시작하기 전에 기다리게 만드는 자원입니다. CSS는 CSSOM 완성까지 렌더를 차단하고, 동기 스크립트는 HTML 파싱 자체를 멈춥니다. `defer`는 파싱과 병렬로 다운로드하고 파싱 완료 후 실행하며, `async`는 다운로드 완료 시 즉시 실행합니다. Critical CSS를 인라인하고 나머지를 비동기 로드하는 것이 대표적인 개선 전략입니다.
-
----
-
-## 110. 메인 스레드 점유가 왜 INP와 연결되나
-
-성능 얘기에서 자주 놓치는 지점이 있다.
-다운로드가 끝났다고 상호작용이 곧바로 빨라지는 건 아니다.
-
-### 핵심 개념
-
-브라우저의 메인 스레드는 한 번에 하나의 작업만 처리할 수 있다. 메인 스레드가 긴 작업(Long Task, 50ms 이상)에 묶이면:
-
-- 클릭 처리
-- 입력 반응
-- 렌더 업데이트
-- 페인트
-
-가 지연될 수 있다. 이건 곧 INP와 연결된다.
-
-### 왜 이게 중요한가
-
-사용자는 "다운로드 끝났냐"보다
-"눌렀을 때 반응하냐"를 더 민감하게 느낀다.
-
-즉 메인 스레드를 오래 점유하는 작업은:
-
-- 로딩 이후에도 UX를 나쁘게 만들 수 있다
-
-### 흔한 원인
-
-- 큰 JSON 파싱
-- 무거운 계산 (정렬, 필터, 집계)
-- 대형 리스트 렌더링
-- 차트 초기화
-- 드래그 중 과도한 state 업데이트
-- 많은 컴포넌트 동시 재계산
-
-### 예시
+메인 스레드가 50ms+ Long Task에 묶이면 클릭/입력 처리가 지연 → INP 악화.
 
 ```tsx
-// 나쁜 예: 메인 스레드를 오래 점유하는 동기 작업
-function processData(rawData) {
-  // 50ms 이상 걸리면 Long Task가 됨
-  const parsed = JSON.parse(rawData);           // 큰 JSON 파싱
-  const filtered = parsed.filter(complexFilter); // 수천 건 필터
-  const sorted = filtered.sort(complexSort);     // 정렬
-  const grouped = groupBy(sorted, "category");   // 그룹핑
-  return grouped;
-}
-```
-
-```tsx
-// 개선 예: Web Worker로 무거운 계산 오프로드
-// worker.ts
-self.onmessage = (e) => {
-  const { rawData } = e.data;
-  const parsed = JSON.parse(rawData);
-  const filtered = parsed.filter(complexFilter);
-  const sorted = filtered.sort(complexSort);
-  const grouped = groupBy(sorted, "category");
-  self.postMessage(grouped);
-};
-
-// 메인 스레드
+// Web Worker로 무거운 계산 오프로드
 const worker = new Worker(new URL("./worker.ts", import.meta.url));
 worker.postMessage({ rawData });
-worker.onmessage = (e) => {
-  setData(e.data); // 결과만 메인 스레드에서 처리
-};
-```
+worker.onmessage = (e) => setData(e.data);
 
-```tsx
-// 개선 예: scheduler.yield()로 메인 스레드에 양보 (실험적 API)
+// scheduler.yield()로 메인 스레드에 양보
 async function processInChunks(items) {
   for (let i = 0; i < items.length; i += 100) {
     processChunk(items.slice(i, i + 100));
-
-    // 브라우저에게 다른 작업(클릭, 렌더 등) 처리 기회 제공
-    if ("scheduler" in globalThis) {
-      await scheduler.yield();
-    } else {
-      await new Promise((r) => setTimeout(r, 0));
-    }
+    if ("scheduler" in globalThis) await scheduler.yield();
+    else await new Promise((r) => setTimeout(r, 0));
   }
 }
 ```
 
-### 자주 하는 오해
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- 네트워크만 빠르면 반응성도 좋다 → 틀림
-- React 쓰면 UI 멈춤은 알아서 해결된다 → 메인 스레드 점유는 여전히 중요하다
-- 렌더가 많으면 무조건 문제다 → 무엇이 얼마나 오래 막느냐가 더 중요하다
-- `useCallback`/`useMemo`를 걸면 해결된다 → 이들은 참조 안정성과 재계산 방지를 위한 것이지, Long Task 자체를 해결하지 못한다
-
-### 실무 연결
-
-INP를 개선하려면:
-
-- Long Task 쪼개기 (`setTimeout`, `scheduler.yield()`)
-- Web Worker로 무거운 계산 오프로드
-- `startTransition`으로 긴급/비긴급 업데이트 분리
-- 렌더 범위 줄이기
-- 무거운 라이브러리 초기화 시점 조정 (idle time 또는 interaction 시점)
-
-> 이제 메인 스레드와 반응성 연결을 봤다. 그다음엔 렌더링 비용이 큰 대표 사례인 **긴 리스트와 무거운 UI**로 넘어가야 한다.
+> HTML은 200ms에 도착하는데 화면이 2초 동안 비어있음. 원인은 `<head>`에 800KB CSS와 동기 `<script>` 3개가 있어서 파싱이 멈춤. Critical CSS만 인라인하고 나머지는 `defer`로 바꾸니 첫 화면이 800ms에 표시.
 
 ### 면접 압축 답변
 
-**10초**: 메인 스레드가 50ms 이상의 Long Task에 묶이면 클릭/입력 처리가 지연되어 INP가 나빠집니다.
-
-**30초**: 메인 스레드가 긴 작업에 점유되면 클릭과 입력 처리, 화면 업데이트가 지연되어 INP가 나빠질 수 있습니다. 해결하려면 긴 작업을 `setTimeout`이나 `scheduler.yield()`로 쪼개거나, Web Worker로 메인 스레드 밖에서 처리하는 것이 효과적입니다. `useMemo`나 `useCallback`은 참조 안정성을 위한 것이지 Long Task 자체를 해결하지는 못합니다.
+- **10초**: CSS는 렌더를 차단하고 동기 스크립트는 파싱을 차단합니다. `defer`/Critical CSS로 첫 화면을 앞당기고, Long Task는 Web Worker로 오프로드합니다.
+- **30초**: 렌더 차단 리소스(CSS, 동기 스크립트)와 메인 스레드 Long Task는 각각 첫 화면과 응답성을 악화시킵니다. `defer`는 파싱과 병렬로 다운로드하고 파싱 완료 후 순서대로 실행하며, Critical CSS를 인라인하고 나머지를 비동기 로드합니다. 50ms+ Long Task는 `scheduler.yield()`나 Web Worker로 쪼개야 INP가 개선됩니다.
 
 ---
 
-## 111. 긴 리스트와 무거운 UI는 왜 별도 전략이 필요한가
+## 107. 긴 리스트, Observer API, 무거운 UI 전략
 
-실제 서비스에서 성능 병목은 자주 특정 컴포넌트 패턴에 집중된다.
-그 대표가 긴 리스트, 차트, 복잡한 편집기, DnD UI다.
+> **TL;DR** — 긴 리스트는 virtualization으로 보이는 영역만 렌더. IntersectionObserver/ResizeObserver는 scroll/resize 이벤트보다 성능이 좋다. 무거운 UI는 상태 범위 축소 + lazy load가 핵심.
 
-### 핵심 개념
-
-이런 화면들은 단순 페이지보다 아래 비용이 크다.
-
-- 렌더할 항목 수가 많다
-- 계산량이 많다
-- 이벤트가 빈번하다
-- 상태 업데이트가 촘촘하다
-
-### 왜 이게 중요한가
-
-이런 UI를 일반 화면처럼 다루면:
-
-- 초기 렌더가 무겁고
-- 스크롤이 끊기고
-- 클릭 반응이 느리고
-- 작은 state 변화에도 전체가 다시 계산될 수 있다
-
-### 예시: Virtualization
+### Virtualization — 보이는 영역만 렌더
 
 ```tsx
-// 나쁜 예: 10,000개 항목 전부 렌더
-function ItemList({ items }) {
-  return (
-    <ul>
-      {items.map((item) => (
-        <li key={item.id}>{item.name}</li>
-      ))}
-    </ul>
-  );
-}
-```
-
-```tsx
-// 좋은 예: react-window로 보이는 영역만 렌더
+// 10,000개 중 화면에 보이는 ~15개만 DOM에 존재
 import { FixedSizeList } from "react-window";
 
-function ItemList({ items }) {
-  return (
-    <FixedSizeList
-      height={600}
-      itemCount={items.length}
-      itemSize={40}
-      width="100%"
-    >
-      {({ index, style }) => (
-        <div style={style}>{items[index].name}</div>
-      )}
-    </FixedSizeList>
-  );
-}
-// 10,000개 중 화면에 보이는 ~15개만 실제 DOM에 존재
+<FixedSizeList height={600} itemCount={items.length} itemSize={40} width="100%">
+  {({ index, style }) => <div style={style}>{items[index].name}</div>}
+</FixedSizeList>
 ```
 
-```tsx
-// 상태 범위 축소: 개별 항목의 상태를 분리
-function ItemRow({ item }) {
-  // 이 컴포넌트만 재렌더됨
-  const [isEditing, setIsEditing] = useState(false);
+### IntersectionObserver vs ResizeObserver
 
-  return (
-    <div>
-      {isEditing ? (
-        <input defaultValue={item.name} />
-      ) : (
-        <span onClick={() => setIsEditing(true)}>{item.name}</span>
-      )}
-    </div>
-  );
-}
-```
-
-### 실무 연결
-
-대표 전략:
-
-- **Virtualization**: `react-window`, `@tanstack/react-virtual` 등으로 보이는 영역만 렌더
-- **메모이제이션의 신중한 사용**: `React.memo`는 props가 자주 바뀌지 않는 컴포넌트에 효과적
-- **파생 계산 최소화**: `useMemo`로 비싼 계산 캐시 (실제로 비쌀 때만)
-- **상태 범위 축소**: 전역 상태 대신 해당 컴포넌트에 가까운 곳에 상태 배치
-- **일시 상태와 저장 상태 분리**: 드래그 위치, 호버 상태 등은 서버와 무관하게 관리
-- **비싼 라이브러리 lazy load**: 차트, 에디터 등은 필요 시점에 로드
-
-### 자주 하는 오해
-
-- 리스트는 `map`만 잘 쓰면 된다 → 수백 개 이상이면 virtualization을 검토해야 한다
-- `memo`만 걸면 끝이다 → 데이터 구조와 렌더 범위가 더 중요할 수 있다
-- 성능 문제는 라이브러리 탓이다 → 상태 설계와 업데이트 범위 문제일 때가 많다
-- `key`만 잘 주면 성능이 좋아진다 → `key`는 reconciliation의 정확성을 위한 것이지, 렌더 자체를 줄이지 않는다
-
-> 이제 수치 최적화 쪽을 많이 봤다. 그다음엔 사용자가 느끼는 성능, 즉 **체감 성능과 fallback UI**로 넘어가야 한다.
-
-### 면접 압축 답변
-
-**10초**: 긴 리스트나 무거운 UI는 virtualization과 상태 범위 축소 같은 별도 전략이 필요합니다.
-
-**30초**: 긴 리스트나 차트, DnD 같은 무거운 UI는 항목 수와 계산량, 업데이트 범위가 문제인 경우가 많습니다. `react-window` 같은 라이브러리로 보이는 영역만 렌더하는 virtualization, 상태 범위 축소, 무거운 모듈 지연 로딩 같은 별도 전략이 필요합니다. `key`나 `memo`만으로는 근본적인 렌더 비용을 줄이기 어렵습니다.
-
----
-
-## 111-1. IntersectionObserver와 ResizeObserver
-
-스크롤 이벤트에 로직을 걸어 "요소가 보이는지" 확인하거나,
-윈도우 리사이즈에 반응해 컴포넌트 크기를 조정하는 패턴은 오래됐지만 성능 문제가 크다.
-현대 브라우저는 이를 대체하는 전용 Observer API를 제공한다.
-
-### IntersectionObserver — 뷰포트 진입/이탈 감지
-
-IntersectionObserver는 대상 요소가 뷰포트(또는 특정 루트 요소)와 교차하는지를 비동기적으로 관찰한다.
-
-주요 용도:
-
-- **이미지 Lazy Loading**: 뷰포트에 들어올 때 이미지 로드
-- **무한 스크롤**: 하단 센티널 요소가 보이면 다음 페이지 로드
-- **노출 분석**: 광고나 콘텐츠가 실제로 화면에 보였는지 추적
-- **애니메이션 트리거**: 요소가 화면에 나타날 때 등장 애니메이션 시작
-
-```tsx
-// IntersectionObserver로 이미지 Lazy Loading
-function LazyImage({ src, alt }: { src: string; alt: string }) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect(); // 한 번 보이면 관찰 중단
-        }
-      },
-      { rootMargin: "200px" } // 뷰포트 200px 전에 미리 로드
-    );
-
-    if (imgRef.current) {
-      observer.observe(imgRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <img
-      ref={imgRef}
-      src={isVisible ? src : undefined}
-      alt={alt}
-      style={{ minHeight: 200 }}
-    />
-  );
-}
-```
+| | IntersectionObserver | ResizeObserver |
+|---|---|---|
+| **감지 대상** | 뷰포트 진입/이탈 | 요소 크기 변화 |
+| **용도** | lazy loading, 무한 스크롤, 노출 분석 | 반응형 차트, 동적 레이아웃 |
+| **장점** | scroll 이벤트 대체, 강제 reflow 없음 | resize 이벤트 대체, 개별 요소 감지 |
 
 ```tsx
 // IntersectionObserver로 무한 스크롤
-function InfiniteList({ loadMore }: { loadMore: () => void }) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        loadMore();
-      }
-    });
-
-    if (sentinelRef.current) {
-      observer.observe(sentinelRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, [loadMore]);
-
-  return <div ref={sentinelRef} style={{ height: 1 }} />;
-}
+useEffect(() => {
+  const observer = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) loadMore();
+  });
+  if (sentinelRef.current) observer.observe(sentinelRef.current);
+  return () => observer.disconnect();
+}, [loadMore]);
 ```
 
-### ResizeObserver — 요소 크기 변화 감지
+### scroll/resize 이벤트보다 나은 이유
 
-ResizeObserver는 특정 요소의 크기가 변할 때 콜백을 호출한다.
-윈도우 리사이즈와 다르게, **개별 요소** 단위로 크기 변화를 감지할 수 있다.
+| | scroll/resize 이벤트 | Observer API |
+|---|---|---|
+| 실행 빈도 | 초당 수십~수백 회 | 필요할 때만 |
+| 강제 reflow | `getBoundingClientRect()` 호출 시 발생 | 없음 |
+| 코드 복잡도 | throttle + 수동 계산 | 선언적 |
 
-주요 용도:
+### 실무 에피소드 — 이런 상황에서 만난다
 
-- **반응형 컴포넌트**: 미디어 쿼리 없이 컴포넌트 자체 크기에 따라 레이아웃 변경
-- **차트/캔버스 리사이즈**: 컨테이너 크기에 맞춰 차트 다시 그리기
-- **동적 레이아웃**: 콘텐츠 변화에 따른 크기 조정 감지
-
-```tsx
-// ResizeObserver로 반응형 차트 컨테이너
-function ResponsiveChart({ data }: { data: ChartData }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-  useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setDimensions({ width, height });
-    });
-
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
-      <Chart data={data} width={dimensions.width} height={dimensions.height} />
-    </div>
-  );
-}
-```
-
-### 왜 scroll/resize 이벤트보다 나은가
-
-| 항목 | scroll/resize 이벤트 | Observer API |
-|------|----------------------|--------------|
-| 실행 빈도 | 매우 높음 (초당 수십~수백 회) | 필요할 때만 콜백 |
-| 메인 스레드 점유 | 높음 (throttle/debounce 필요) | 최소화 (브라우저가 최적화) |
-| 레이아웃 강제 | `getBoundingClientRect()` 호출 시 강제 reflow | 비동기 처리, 강제 reflow 없음 |
-| 코드 복잡도 | throttle + 수동 계산 필요 | 선언적이고 간결 |
-
-scroll 이벤트 안에서 `getBoundingClientRect()`를 호출하면 매 이벤트마다 강제 동기 레이아웃이 발생한다.
-IntersectionObserver는 브라우저가 내부적으로 최적화된 타이밍에 콜백을 호출하므로 이 문제가 없다.
-
-### 자주 하는 오해
-
-- `scroll` 이벤트에 throttle만 걸면 충분하다 → throttle을 걸어도 레이아웃 속성 접근 시 강제 reflow가 발생한다
-- IntersectionObserver는 lazy loading에만 쓴다 → 무한 스크롤, 노출 분석, 애니메이션 트리거에도 유용하다
-- ResizeObserver는 `window.onresize`와 같다 → `window.onresize`는 윈도우 크기만, ResizeObserver는 개별 요소 크기를 관찰한다
-- Observer API는 폴리필이 필요하다 → 현재 모든 주요 브라우저에서 지원된다
+> 상품 목록 500개를 전부 렌더하니 초기 로딩 3초, 스크롤 시 버벅임. `react-window`로 virtualization 적용하니 DOM 노드가 500개 → 20개로 줄어들고 초기 로딩 0.3초, 스크롤 60fps. 무한 스크롤은 IntersectionObserver로 하단 센티널 감지.
 
 ### 면접 압축 답변
 
-**10초**: IntersectionObserver는 요소의 뷰포트 진입을 비동기로 감지하고, ResizeObserver는 요소 크기 변화를 감지하며, 둘 다 scroll/resize 이벤트보다 성능이 좋습니다.
-
-**30초**: IntersectionObserver는 요소가 뷰포트에 들어오거나 나갈 때를 비동기로 감지하여 lazy loading, 무한 스크롤, 노출 분석 등에 사용합니다. ResizeObserver는 개별 요소의 크기 변화를 감지하여 미디어 쿼리 없이 반응형 컴포넌트를 만들 수 있습니다. 이 API들은 scroll/resize 이벤트와 달리 강제 동기 레이아웃을 발생시키지 않고, 브라우저가 최적화된 타이밍에 콜백을 호출하므로 성능이 훨씬 좋습니다.
+- **10초**: 긴 리스트는 virtualization, 뷰포트 감지는 IntersectionObserver, 크기 감지는 ResizeObserver가 scroll/resize 이벤트보다 성능이 좋습니다.
+- **30초**: 수백 개 이상의 리스트는 `react-window` 같은 라이브러리로 보이는 영역만 렌더하고, IntersectionObserver로 무한 스크롤과 lazy loading을, ResizeObserver로 반응형 컴포넌트를 구현합니다. 이 API들은 scroll/resize 이벤트와 달리 강제 reflow를 발생시키지 않아 성능이 좋습니다.
 
 ---
 
-## 112. 체감 성능과 fallback UI는 왜 숫자 최적화와 따로 볼 수 없나
+## 108. 체감 성능과 Fallback UI
 
-성능 지표를 좋아지게 만드는 것과, 사용자가 덜 답답하게 느끼게 만드는 것은 겹치면서도 완전히 같진 않다.
-그래서 **체감 성능**이라는 관점을 같이 봐야 한다.
+> **TL;DR** — 같은 대기 시간이라도 skeleton, optimistic UI, pending 상태가 있으면 덜 답답하다. 숫자 최적화와 UX 피드백을 함께 설계해야 한다. 300ms 이내 응답이면 로딩 표시를 생략하는 것도 방법.
 
-### 핵심 개념
+### 체감 성능 전략
 
-체감 성능은 사용자가:
-
-- 지금 뭔가 진행 중인지
-- 언제 결과가 나올지
-- 현재 조작이 먹었는지
-
-를 얼마나 빨리 이해하느냐와 연결된다.
-
-### 왜 이게 중요한가
-
-같은 2초 대기라도:
-
-- 아무 변화가 없으면 멈춘 것처럼 느껴지고
-- 스켈레톤, progress, optimistic UI, 버튼 상태 변화가 있으면 덜 답답하게 느낄 수 있다
-
-즉 UX는 숫자만으로 끝나지 않는다.
-
-### 예시
+| 전략 | 효과 | 주의 |
+|---|---|---|
+| **Skeleton UI** | 레이아웃 힌트로 대기감 감소 | 실제 콘텐츠 크기와 일치해야 CLS 방지 |
+| **Optimistic Update** | 서버 응답 전 UI 먼저 반영 | 실패 시 롤백 로직 필수 |
+| **Pending 상태** | 클릭 즉시 피드백 | 300ms 이내면 생략이 더 자연스러울 수 있음 |
+| **Progressive disclosure** | 중요한 콘텐츠부터 단계적 표시 | Suspense boundary 설계 필요 |
 
 ```tsx
-// Skeleton UI: 콘텐츠 로딩 전 레이아웃 미리 보여주기
-function PostSkeleton() {
-  return (
-    <div className="post-skeleton">
-      <div className="skeleton-title" style={{ width: "60%", height: 24 }} />
-      <div className="skeleton-body" style={{ width: "100%", height: 16 }} />
-      <div className="skeleton-body" style={{ width: "80%", height: 16 }} />
-    </div>
-  );
-}
-
-function PostList() {
-  const { data, isLoading } = usePosts();
-
-  if (isLoading) {
-    return Array.from({ length: 5 }, (_, i) => <PostSkeleton key={i} />);
+// Optimistic Update: 서버 응답 전 UI 먼저 반영
+async function handleLike() {
+  setIsLiked(true);        // 즉시 UI 반영
+  setCount((c) => c + 1);
+  try {
+    await api.likePost(postId);
+  } catch {
+    setIsLiked(false);     // 실패 시 롤백
+    setCount((c) => c - 1);
   }
-
-  return data.map((post) => <PostCard key={post.id} post={post} />);
 }
 ```
 
-```tsx
-// Optimistic Update: 서버 응답 전에 UI를 먼저 반영
-function LikeButton({ postId, initialCount }) {
-  const [count, setCount] = useState(initialCount);
-  const [isLiked, setIsLiked] = useState(false);
+### 실무 에피소드 — 이런 상황에서 만난다
 
-  async function handleLike() {
-    // 서버 응답 전에 UI를 먼저 업데이트 (optimistic)
-    setIsLiked(true);
-    setCount((c) => c + 1);
-
-    try {
-      await api.likePost(postId);
-    } catch {
-      // 실패 시 롤백
-      setIsLiked(false);
-      setCount((c) => c - 1);
-    }
-  }
-
-  return (
-    <button onClick={handleLike} disabled={isLiked}>
-      {isLiked ? "Liked" : "Like"} ({count})
-    </button>
-  );
-}
-```
-
-```tsx
-// 버튼 Pending 상태: 클릭 후 즉시 피드백
-function SubmitButton() {
-  const [isPending, setIsPending] = useState(false);
-
-  async function handleSubmit() {
-    setIsPending(true);
-    try {
-      await submitForm();
-    } finally {
-      setIsPending(false);
-    }
-  }
-
-  return (
-    <button onClick={handleSubmit} disabled={isPending}>
-      {isPending ? "저장 중..." : "저장"}
-    </button>
-  );
-}
-```
+> 좋아요 버튼을 누르면 서버 응답까지 1초 동안 아무 반응이 없어서 여러 번 누르는 사용자가 많았다. Optimistic update로 즉시 하트 색상과 카운트를 바꾸고, 서버 실패 시에만 롤백하도록 변경. 체감상 "즉각 반응"이 되면서 중복 클릭도 줄어듦.
 
 ### 자주 하는 오해
 
-- spinner만 있으면 체감 성능도 좋아진다 → 지나치게 오래 도는 spinner는 오히려 불안감을 준다. 300ms 이내 응답이면 spinner를 아예 안 보여주는 게 더 자연스럽다.
-- skeleton이 있으면 LCP도 좋아진다 → skeleton은 체감 성능을 개선하지만, LCP 지표 자체는 실제 콘텐츠가 나타나야 개선된다
-- optimistic UI는 성능 최적화가 아니다 → 실제 사용자 체감에는 큰 영향을 준다
-
-### 실무 연결
-
-대표 전략:
-
-- **Skeleton UI**: 콘텐츠 로딩 전 레이아웃 힌트 제공
-- **Progressive disclosure**: 중요한 콘텐츠부터 단계적으로 표시
-- **Optimistic update**: 서버 응답 전에 UI를 먼저 반영, 실패 시 롤백
-- **버튼 pending 상태**: 클릭 직후 즉각적인 피드백
-- **부분 로딩**: 전체 페이지 로딩 대신 변경 부분만 업데이트
-- **실패 시 즉시 복구 가능 UI**: 에러 발생 시 재시도 버튼 등
-
-> 이제 성능 최적화의 마지막 축까지 봤다. 그다음엔 이 챕터 전체를 하나의 설계 감각으로 정리해야 한다.
+- spinner만 있으면 체감이 좋다 → **오래 도는 spinner는 오히려 불안감을 준다.**
+- skeleton이 있으면 LCP도 좋아진다 → **체감은 개선하지만 LCP 지표는 실제 콘텐츠가 나타나야 개선.**
+- 숫자 최적화만 하면 UX도 좋아진다 → **피드백 없는 빠른 응답보다 피드백 있는 적당한 응답이 더 좋게 느껴질 수 있다.**
 
 ### 면접 압축 답변
 
-**10초**: 체감 성능은 skeleton, optimistic UI, pending 상태 같은 즉각적 피드백으로 개선하며, 숫자 최적화와 함께 설계해야 합니다.
-
-**30초**: 체감 성능은 사용자가 현재 작업이 진행 중이고 조작이 반영됐다고 느끼는 속도와 연결됩니다. 같은 대기 시간이라도 skeleton이나 optimistic update가 있으면 덜 답답하게 느낍니다. 그래서 숫자 최적화와 별개로, 즉각적인 UI 피드백과 실패 시 롤백 설계가 함께 필요합니다. 300ms 이내 응답이면 로딩 표시를 아예 생략하는 것도 방법입니다.
-
----
-
-## 113. 이 챕터를 읽고 나면 무엇이 연결되어야 하나
-
-이 챕터를 다 읽고 나면 아래 흐름이 한 덩어리로 보여야 한다.
-
-- 성능 최적화는 측정부터 시작한다
-- Core Web Vitals는 로딩(LCP), 반응성(INP), 안정성(CLS)을 대표한다
-- LCP는 주요 콘텐츠 표시 속도이며, 서버 응답/리소스 우선순위/렌더 차단이 원인일 수 있다
-- INP는 상호작용 반응성이며, Long Task와 메인 스레드 점유가 핵심이다
-- CLS는 시각적 안정성이며, 공간 예약과 폰트 전략이 핵심이다
-- 필드 데이터와 실험실 데이터는 함께 봐야 한다
-- 번들 크기는 다운로드뿐 아니라 파싱/실행 비용과 연결된다
-- 코드 스플리팅은 초기 필요 코드만 먼저 보내기 위한 전략이다
-- 이미지 최적화는 LCP와 CLS에 동시에 영향을 준다
-- lazy loading은 유용하지만 핵심 리소스엔 독이 될 수 있다
-- 렌더 차단 리소스와 메인 스레드 점유는 첫 화면과 응답성을 늦춘다
-- 긴 리스트와 무거운 UI는 virtualization 등 별도 전략이 필요하다
-- 체감 성능은 숫자 최적화와 함께 설계해야 한다
-
-즉,
-이번 챕터는 단순 팁 모음이 아니라,
-**"무엇을 측정하고, 어떤 병목을 어떤 사용자 경험 문제로 해석하며, 어떤 전략으로 개선할 것인가"**를 배우는 챕터다.
+- **10초**: 체감 성능은 skeleton, optimistic UI, pending 상태 같은 즉각적 피드백으로 개선하며, 숫자 최적화와 함께 설계해야 합니다.
+- **30초**: 같은 대기 시간이라도 skeleton이나 optimistic update가 있으면 덜 답답합니다. 300ms 이내 응답이면 로딩 표시를 생략하고, 그 이상이면 skeleton이나 pending 상태를 보여주는 게 자연스럽습니다. 숫자(LCP, INP)를 줄이는 것과 피드백(skeleton, optimistic)을 주는 것을 함께 설계해야 진짜 UX가 좋아집니다.
 
 ---
 
-# 이 챕터를 읽은 뒤 자연스럽게 이어질 다음 질문들
+# 다음 챕터로의 연결
 
-1. 테스트는 왜 단순 버그 탐지보다 변경 자신감과 연결되나?
-2. unit, integration, E2E는 어떤 실패를 각각 잡나?
-3. mock은 언제 유용하고 언제 독이 되나?
-4. flaky test는 왜 팀 신뢰를 무너뜨리나?
-5. 테스트는 CI/CD와 어떻게 연결돼야 하나?
+이 챕터에서 다룬 것을 한 줄로 요약하면:
 
----
+> **"무엇을 측정하고, 어떤 병목을 어떤 사용자 경험 문제로 해석하며, 어떤 전략으로 개선할 것인가"**
 
-# 사용법
+```
+측정 → CWV(LCP/INP/CLS) → 렌더링 파이프라인
+  → 번들/코드 스플리팅 → 이미지/lazy loading
+    → 렌더 차단/메인 스레드 → virtualization/Observer
+      → 체감 성능/fallback UI
+```
 
-이 챕터는 아래 순서로 보면 좋다.
+다음 챕터(챕터 9)에서는 **테스트 전략**으로 넘어간다.
 
-1. 측정부터 해야 한다는 원칙을 먼저 잡는다.
-2. Core Web Vitals로 느림을 사용자 경험 기준으로 분해한다.
-3. LCP, INP, CLS를 각각 병목 유형과 연결한다.
-4. 번들, 코드 스플리팅, 이미지, lazy loading으로 구현 전략을 본다.
-5. 마지막에 체감 성능과 fallback UI까지 묶어 UX 관점으로 정리한다.
-
-이렇게 보면 성능 최적화가 단순 숫자 개선이 아니라, 실제 사용자가 느끼는 빠름과 반응성, 안정성을 설계하는 작업이라는 감각이 더 선명해진다.
+- 테스트는 왜 단순 버그 탐지보다 변경 자신감과 연결되나?
+- unit, integration, E2E는 어떤 실패를 각각 잡나?
+- mock은 언제 유용하고 언제 독이 되나?
+- flaky test는 왜 팀 신뢰를 무너뜨리나?

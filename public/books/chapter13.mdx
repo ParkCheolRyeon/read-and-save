@@ -1,0 +1,874 @@
+---
+title: "CSS 레이아웃, 웹 보안, SEO, React 19까지"
+chapter: "13"
+summary: "Flexbox/Grid, 반응형 디자인, XSS/CSRF 방어, SEO 기초, React 19 신규 기능까지 챕터 1-12의 이론적 공백을 채우는 챕터입니다."
+estimatedReadMinutes: 55
+learningGoals:
+  - "Flexbox와 Grid를 언제 각각 쓰는지 구분하고 반응형 패턴을 설명한다"
+  - "CSS 명시도 규칙과 CSS 변수를 이해한다"
+  - "XSS와 CSRF의 공격 원리와 구체적 방어 전략을 설명한다"
+  - "Next.js Metadata API를 포함한 SEO 기초를 실무 관점에서 이해한다"
+  - "React 19의 use, useOptimistic, useFormStatus, ref as prop을 설명한다"
+---
+
+# 챕터 13. CSS 레이아웃, 웹 보안, SEO, React 19까지
+
+이 챕터의 목표는 아래 한 줄로 요약된다.
+
+> **챕터 1-12에서 다루지 못한 이론적 공백 — CSS 레이아웃, 웹 보안, SEO, React 19 — 을 채워서 면접 대비의 빈틈을 없앤다.**
+
+### 전체 흐름 맵
+
+```
+Part A. CSS 레이아웃과 반응형 디자인
+  → Flexbox vs Grid (언제 뭘 쓰나)
+  → 반응형 디자인 (미디어 쿼리, Container Query)
+  → CSS 명시도와 CSS 변수
+
+Part B. 웹 보안
+  → XSS (공격 원리 + 방어)
+  → CSRF (공격 원리 + 방어)
+  → CSP, 보안 헤더
+
+Part C. SEO 기초
+  → meta 태그, Open Graph, structured data
+  → Next.js Metadata API
+  → sitemap, robots.txt
+
+Part D. React 19 신규 기능
+  → use() 훅
+  → useOptimistic
+  → useFormStatus / useFormState
+  → ref as prop (forwardRef 불필요)
+  → React 19 전체 정리
+```
+
+---
+
+# Part A. CSS 레이아웃과 반응형 디자인
+
+---
+
+## 1. Flexbox vs Grid — 언제 뭘 쓰는가
+
+> **TL;DR** — Flexbox는 **한 방향**(가로 또는 세로) 배치에 강하고, Grid는 **두 방향**(행 + 열) 동시 배치에 강하다. "한 줄 정렬이면 Flex, 격자 구조면 Grid"가 기본 감각이다. 둘은 대체가 아니라 함께 쓴다.
+
+### 핵심 비교
+
+| | Flexbox | Grid |
+|---|---|---|
+| **방향** | 1차원 (주축 한 방향) | 2차원 (행 + 열 동시) |
+| **적합한 경우** | 네비게이션, 버튼 그룹, 카드 한 줄, 정렬 | 대시보드, 갤러리, 복잡한 페이지 레이아웃 |
+| **아이템 크기** | 콘텐츠 기반 (아이템이 자신의 크기를 결정) | 컨테이너 기반 (그리드가 영역을 정의) |
+| **줄 바꿈** | `flex-wrap`으로 가능하지만 행 간 제어 약함 | 행과 열을 명시적으로 정의 |
+| **갭** | `gap` 지원 | `gap` 지원 |
+| **정렬** | `justify-content`, `align-items` | `justify-items`, `align-items`, `place-items` |
+
+### Flexbox 기본
+
+```css
+/* 네비게이션 바 — 가로 정렬의 전형 */
+.nav {
+  display: flex;
+  justify-content: space-between; /* 양 끝 정렬 */
+  align-items: center;            /* 세로 중앙 */
+  gap: 16px;
+}
+
+/* 카드 한 줄 — 균등 분배 */
+.card-row {
+  display: flex;
+  gap: 16px;
+}
+.card-row > .card {
+  flex: 1; /* 균등 분배 */
+}
+
+/* 중앙 정렬 — Flexbox의 가장 흔한 패턴 */
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+```
+
+### Flexbox 핵심 속성
+
+| 속성 | 역할 | 기본값 |
+|---|---|---|
+| `flex-direction` | 주축 방향 | `row` |
+| `justify-content` | 주축 정렬 | `flex-start` |
+| `align-items` | 교차축 정렬 | `stretch` |
+| `flex-wrap` | 줄 바꿈 허용 | `nowrap` |
+| `gap` | 아이템 간격 | `0` |
+| `flex` | `flex-grow flex-shrink flex-basis` 단축 | `0 1 auto` |
+
+`flex: 1`은 `flex-grow: 1; flex-shrink: 1; flex-basis: 0%`의 단축이다. 남은 공간을 균등 분배.
+
+### Grid 기본
+
+```css
+/* 대시보드 레이아웃 — 행과 열 동시 정의 */
+.dashboard {
+  display: grid;
+  grid-template-columns: 250px 1fr;       /* 사이드바 + 메인 */
+  grid-template-rows: 60px 1fr 40px;      /* 헤더 + 콘텐츠 + 푸터 */
+  grid-template-areas:
+    "sidebar header"
+    "sidebar main"
+    "sidebar footer";
+  min-height: 100vh;
+}
+
+.sidebar { grid-area: sidebar; }
+.header  { grid-area: header; }
+.main    { grid-area: main; }
+.footer  { grid-area: footer; }
+
+/* 반응형 카드 갤러리 — 가장 강력한 Grid 패턴 */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+/* 화면 크기에 따라 컬럼 수가 자동 조절됨 — 미디어 쿼리 없이! */
+```
+
+### Grid 핵심 속성
+
+| 속성 | 역할 |
+|---|---|
+| `grid-template-columns` | 열 정의 |
+| `grid-template-rows` | 행 정의 |
+| `grid-template-areas` | 이름 기반 영역 배치 |
+| `grid-column` / `grid-row` | 아이템이 차지하는 범위 |
+| `gap` | 행/열 간격 |
+| `repeat()` | 반복 패턴 |
+| `minmax()` | 최소/최대 크기 |
+| `auto-fill` / `auto-fit` | 자동 채우기 |
+
+### Flex + Grid를 함께 쓰는 패턴
+
+```css
+/* 페이지 전체는 Grid로 */
+.page {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  grid-template-rows: 60px 1fr;
+}
+
+/* 네비게이션 내부는 Flex로 */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 카드 그리드 안의 카드 내부는 Flex로 */
+.card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+```
+
+### 선택 가이드
+
+```
+이 레이아웃은...
+│
+├── 한 방향 정렬? (네비, 버튼 그룹, 리스트 아이템) → Flexbox
+├── 격자 구조? (대시보드, 갤러리, 폼 레이아웃) → Grid
+├── 반응형 카드 그리드? → Grid (repeat + auto-fill + minmax)
+└── 복잡한 페이지 + 내부 컴포넌트 → Grid(페이지) + Flex(내부)
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 카드 갤러리를 Flexbox + `flex-wrap`으로 구현했는데, 마지막 줄의 카드가 전체 너비로 늘어나서 레이아웃이 이상해지는 문제. `grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))`로 바꾸니 마지막 줄도 균일한 크기 유지. Flexbox는 한 줄 정렬에, Grid는 격자 배치에 쓰는 게 맞았다.
+
+### 자주 하는 오해
+
+- Flexbox와 Grid는 택일이다 → **함께 쓴다.** 페이지는 Grid, 내부는 Flex가 흔한 패턴.
+- `float`으로도 충분하다 → **레거시.** 현대 레이아웃은 Flex/Grid가 표준.
+- Grid가 항상 더 좋다 → **한 줄 정렬에는 Flexbox가 더 간결하다.**
+- `flex: 1`이면 무조건 균등 분배다 → `flex-basis`와 콘텐츠 크기에 따라 다를 수 있다.
+
+### 면접 압축 답변
+
+- **10초**: Flexbox는 한 방향 정렬, Grid는 행+열 동시 배치에 강합니다. 한 줄이면 Flex, 격자면 Grid, 실무에서는 함께 씁니다.
+- **30초**: Flexbox는 네비게이션, 버튼 그룹 같은 1차원 정렬에, Grid는 대시보드, 카드 갤러리 같은 2차원 격자에 적합합니다. `repeat(auto-fill, minmax())`로 미디어 쿼리 없이 반응형 그리드를 만들 수 있고, 페이지 레이아웃은 Grid로, 내부 컴포넌트 정렬은 Flexbox로 조합하는 것이 흔한 패턴입니다.
+
+---
+
+## 2. 반응형 디자인 — 미디어 쿼리, Container Query, CSS 변수
+
+> **TL;DR** — 미디어 쿼리는 뷰포트 기준, Container Query는 부모 요소 기준으로 반응한다. CSS 변수(`--custom-property`)는 테마와 반응형에서 런타임 값 변경이 가능하다.
+
+### 미디어 쿼리 — 뷰포트 기준
+
+```css
+/* Mobile First: 기본이 모바일, 넓어질수록 스타일 추가 */
+.container {
+  padding: 16px;
+}
+
+@media (min-width: 768px) {
+  .container {
+    padding: 32px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 960px;
+  }
+}
+
+/* 다크 모드 — 시스템 설정 감지 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --text: #e0e0e0;
+  }
+}
+
+/* 모션 감소 — 접근성 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+### Container Query — 부모 요소 기준 (최신)
+
+미디어 쿼리는 **뷰포트** 크기에 반응하지만, Container Query는 **부모 요소** 크기에 반응한다. 재사용 가능한 컴포넌트에 더 적합.
+
+```css
+/* 부모를 container로 선언 */
+.card-wrapper {
+  container-type: inline-size;
+  container-name: card;
+}
+
+/* 부모가 400px 이상이면 가로 배치 */
+@container card (min-width: 400px) {
+  .card {
+    display: flex;
+    flex-direction: row;
+  }
+}
+
+/* 부모가 400px 미만이면 세로 배치 */
+@container card (max-width: 399px) {
+  .card {
+    display: flex;
+    flex-direction: column;
+  }
+}
+```
+
+| | 미디어 쿼리 | Container Query |
+|---|---|---|
+| **기준** | 뷰포트 크기 | 부모 요소 크기 |
+| **적합한 경우** | 페이지 레이아웃 | 재사용 컴포넌트 |
+| **지원** | 모든 브라우저 | 모던 브라우저 (2023+) |
+
+### CSS 변수 (Custom Properties)
+
+```css
+:root {
+  --color-primary: #3b82f6;
+  --color-bg: #ffffff;
+  --color-text: #1a1a1a;
+  --spacing-md: 16px;
+  --radius-md: 8px;
+}
+
+/* 다크 모드에서 변수만 바꾸면 전체 테마 전환 */
+[data-theme="dark"] {
+  --color-bg: #1a1a1a;
+  --color-text: #e0e0e0;
+}
+
+.button {
+  background: var(--color-primary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  color: white;
+}
+
+/* JavaScript에서 런타임 변경 가능 */
+/* document.documentElement.style.setProperty('--color-primary', '#ef4444'); */
+```
+
+| | CSS 변수 | Sass 변수 | JS 상수 |
+|---|---|---|---|
+| **런타임 변경** | 가능 | 불가 (빌드 타임) | 가능하지만 CSS 적용 번거로움 |
+| **상속** | CSS 캐스케이드 따름 | 스코프 기반 | 없음 |
+| **다크 모드** | 선택자만 바꾸면 됨 | 빌드 2벌 필요 | React state로 관리 |
+
+### CSS 명시도 (Specificity)
+
+```
+명시도 우선순위 (높은 → 낮은):
+
+1. !important                          (사용 자제)
+2. 인라인 스타일 (style="...")          1,0,0,0
+3. ID 선택자 (#id)                     0,1,0,0
+4. 클래스/속성/가상클래스 (.class, [attr], :hover)  0,0,1,0
+5. 태그/가상요소 (div, ::before)        0,0,0,1
+6. 전체 선택자 (*)                      0,0,0,0
+```
+
+```css
+/* 명시도 비교 */
+div { color: black; }           /* 0,0,0,1 */
+.text { color: blue; }          /* 0,0,1,0 — 더 높음 */
+#title { color: red; }          /* 0,1,0,0 — 더 높음 */
+div.text { color: green; }      /* 0,0,1,1 — .text보다 높음 */
+
+/* 같은 명시도면 뒤에 선언된 것이 우선 */
+.text { color: blue; }
+.text { color: green; } /* green 적용 */
+```
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 사이드바에서 카드 컴포넌트를 재사용했는데, 뷰포트 기준 미디어 쿼리라 사이드바(300px)에서도 데스크톱 레이아웃이 적용됨. Container Query로 바꾸니 같은 카드가 메인 영역에서는 가로, 사이드바에서는 세로로 자동 전환.
+
+### 면접 압축 답변
+
+- **10초**: 미디어 쿼리는 뷰포트 기준, Container Query는 부모 요소 기준으로 반응합니다. CSS 변수는 런타임 테마 전환에 유용합니다.
+- **30초**: 미디어 쿼리는 뷰포트 크기 기준으로 페이지 레이아웃에 적합하고, Container Query는 부모 요소 크기 기준으로 재사용 컴포넌트에 더 적합합니다. CSS 변수는 `var()`로 참조하고 런타임에 변경 가능해서 다크 모드 같은 테마 전환에 강합니다. CSS 명시도는 ID > 클래스 > 태그 순이며, `!important`는 최후의 수단입니다.
+
+---
+
+# Part B. 웹 보안 — XSS와 CSRF
+
+---
+
+## 3. XSS — 공격 원리와 방어
+
+> **TL;DR** — XSS(Cross-Site Scripting)는 공격자가 웹 페이지에 악성 스크립트를 주입해 다른 사용자의 브라우저에서 실행시키는 공격이다. React의 JSX는 기본적으로 이스케이프하지만, `dangerouslySetInnerHTML`이나 `href`에 사용자 입력을 넣으면 취약해진다.
+
+### XSS 종류
+
+| 종류 | 설명 | 예시 |
+|---|---|---|
+| **Stored XSS** | 서버 DB에 저장된 악성 스크립트가 다른 사용자에게 전달 | 게시판 댓글에 `<script>` 삽입 |
+| **Reflected XSS** | URL 파라미터의 악성 입력이 서버 응답에 반영 | `?q=<script>alert(1)</script>` |
+| **DOM-based XSS** | 클라이언트 JS가 DOM을 조작하면서 악성 코드 실행 | `innerHTML = userInput` |
+
+### React에서의 XSS
+
+React의 JSX는 기본적으로 문자열을 **이스케이프** 처리한다. `<script>` 태그가 문자열로 렌더링될 뿐 실행되지 않는다.
+
+```tsx
+// 안전: React가 자동으로 이스케이프
+function Comment({ text }) {
+  return <p>{text}</p>;
+  // text가 "<script>alert('xss')</script>"여도
+  // → <p>&lt;script&gt;alert('xss')&lt;/script&gt;</p>
+  // 문자열로 표시될 뿐 실행 안 됨
+}
+```
+
+**하지만 이 경우는 취약하다:**
+
+```tsx
+// 위험 1: dangerouslySetInnerHTML — 이름 자체가 경고
+function RichContent({ html }) {
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  // html에 <script>가 포함되면 실행될 수 있음!
+}
+
+// 위험 2: href에 사용자 입력 — javascript: 프로토콜
+function UserLink({ url }) {
+  return <a href={url}>링크</a>;
+  // url이 "javascript:alert('xss')"이면 클릭 시 실행!
+}
+
+// 위험 3: eval, Function, innerHTML
+eval(userInput);                          // 절대 금지
+document.getElementById("x").innerHTML = userInput; // 위험
+```
+
+### 방어 전략
+
+| 전략 | 설명 |
+|---|---|
+| **입력 이스케이프** | HTML 특수문자(`<`, `>`, `"`, `'`, `&`)를 엔티티로 변환 |
+| **React JSX 사용** | 기본적으로 이스케이프됨 — `dangerouslySetInnerHTML` 피하기 |
+| **href 검증** | `javascript:` 프로토콜 차단, URL 화이트리스트 |
+| **DOMPurify** | `dangerouslySetInnerHTML`이 불가피할 때 HTML sanitize |
+| **CSP 헤더** | 허용된 스크립트 출처만 실행하게 브라우저에 지시 |
+| **HttpOnly 쿠키** | XSS로 쿠키 탈취 방지 (JS에서 접근 불가) |
+
+```tsx
+// dangerouslySetInnerHTML이 꼭 필요하면 DOMPurify로 sanitize
+import DOMPurify from "dompurify";
+
+function SafeRichContent({ html }) {
+  const clean = DOMPurify.sanitize(html);
+  return <div dangerouslySetInnerHTML={{ __html: clean }} />;
+}
+
+// href 검증
+function SafeLink({ url }) {
+  const isSafe = url.startsWith("https://") || url.startsWith("/");
+  return <a href={isSafe ? url : "#"}>링크</a>;
+}
+```
+
+### CSP (Content Security Policy)
+
+```http
+# 서버 응답 헤더로 설정
+Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' 'unsafe-inline'
+```
+
+| 지시자 | 의미 |
+|---|---|
+| `default-src 'self'` | 기본적으로 같은 출처만 허용 |
+| `script-src 'self'` | 스크립트는 같은 출처만 (인라인 스크립트 차단) |
+| `style-src 'unsafe-inline'` | 인라인 스타일 허용 (CSS-in-JS 때문에 필요할 수 있음) |
+| `img-src *` | 이미지는 모든 출처 허용 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 마크다운 에디터에서 사용자가 입력한 HTML을 그대로 `dangerouslySetInnerHTML`로 렌더링했는데, 보안 감사에서 XSS 취약점으로 지적됨. DOMPurify로 sanitize 파이프라인을 추가하고, CSP 헤더로 인라인 스크립트를 차단하는 이중 방어 적용.
+
+### 면접 압축 답변
+
+- **10초**: XSS는 악성 스크립트 주입 공격이며, React JSX는 기본 이스케이프하지만 `dangerouslySetInnerHTML`과 `href`에 사용자 입력을 넣으면 취약합니다.
+- **30초**: XSS는 공격자가 웹 페이지에 악성 스크립트를 주입하는 공격으로, Stored/Reflected/DOM-based 세 종류가 있습니다. React의 JSX는 기본적으로 이스케이프하지만, `dangerouslySetInnerHTML`이나 `href`에 사용자 입력을 넣으면 취약합니다. 방어는 입력 검증, DOMPurify로 sanitize, CSP 헤더, HttpOnly 쿠키를 조합합니다.
+
+---
+
+## 4. CSRF — 공격 원리와 방어
+
+> **TL;DR** — CSRF(Cross-Site Request Forgery)는 인증된 사용자의 브라우저를 이용해 의도하지 않은 요청을 보내는 공격이다. 쿠키가 자동 전송되는 특성을 악용한다. `SameSite` 쿠키 + CSRF 토큰 + Origin 검증으로 방어.
+
+### 공격 원리
+
+```
+1. 사용자가 bank.com에 로그인 (인증 쿠키 저장)
+2. 사용자가 evil.com을 방문
+3. evil.com에 숨겨진 폼이 bank.com/transfer로 POST 요청
+4. 브라우저가 bank.com 쿠키를 자동으로 포함해서 전송
+5. bank.com 서버는 정상적인 인증 요청으로 처리
+→ 사용자 모르게 송금 실행!
+```
+
+```html
+<!-- evil.com에 있는 공격 코드 -->
+<form action="https://bank.com/transfer" method="POST" style="display:none">
+  <input name="to" value="attacker" />
+  <input name="amount" value="1000000" />
+</form>
+<script>document.forms[0].submit();</script>
+```
+
+### 왜 쿠키 자동 전송이 문제인가
+
+| 인증 방식 | CSRF 취약 여부 | 이유 |
+|---|---|---|
+| 쿠키 기반 인증 | 취약 | 브라우저가 자동으로 쿠키를 포함 |
+| Authorization 헤더 | 안전 | JS로 명시적으로 헤더를 붙여야 함 — 다른 사이트에서 불가 |
+| 쿠키 + SameSite=Lax | 대부분 안전 | cross-site POST가 차단됨 |
+
+### 방어 전략
+
+| 전략 | 설명 |
+|---|---|
+| **SameSite=Lax** (기본값) | cross-site에서의 POST 쿠키 전송 차단 |
+| **CSRF 토큰** | 서버가 발급한 토큰을 폼에 숨겨서 전송 — 다른 사이트는 토큰을 모름 |
+| **Origin/Referer 검증** | 요청의 출처를 서버에서 확인 |
+| **Authorization 헤더 사용** | 쿠키 대신 헤더에 토큰 → CSRF 원천 차단 |
+
+```tsx
+// CSRF 토큰 패턴 (서버가 HTML에 토큰을 심어줌)
+function TransferForm() {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+  return (
+    <form action="/transfer" method="POST">
+      <input type="hidden" name="_csrf" value={csrfToken} />
+      <input name="to" placeholder="받는 사람" />
+      <input name="amount" placeholder="금액" />
+      <button type="submit">송금</button>
+    </form>
+  );
+}
+```
+
+```tsx
+// SPA에서는 Authorization 헤더를 쓰면 CSRF가 원천 차단
+async function transfer(data) {
+  await fetch("/api/transfer", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`, // 다른 사이트에서 이 헤더를 붙일 수 없음
+    },
+    body: JSON.stringify(data),
+  });
+}
+```
+
+### XSS vs CSRF 비교
+
+| | XSS | CSRF |
+|---|---|---|
+| **공격 대상** | 사용자의 브라우저 | 서버 (사용자의 권한 이용) |
+| **공격 방식** | 악성 스크립트 주입 | 인증된 요청 위조 |
+| **원인** | 입력 검증 미흡 | 쿠키 자동 전송 |
+| **방어 핵심** | 이스케이프, CSP, DOMPurify | SameSite, CSRF 토큰, Authorization 헤더 |
+| **관계** | XSS가 있으면 CSRF 방어도 무력화될 수 있음 | - |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 관리자 페이지에서 회원 삭제 API가 쿠키 기반 인증 + GET 메서드로 구현되어 있었는데, 외부 사이트에 `<img src="https://admin.example.com/api/delete-user?id=123">`만 넣어도 삭제가 실행될 수 있는 취약점 발견. DELETE 메서드로 변경 + SameSite=Strict + CSRF 토큰 도입으로 3중 방어.
+
+### 면접 압축 답변
+
+- **10초**: CSRF는 쿠키 자동 전송을 악용해 인증된 사용자의 권한으로 의도하지 않은 요청을 보내는 공격이며, SameSite 쿠키와 CSRF 토큰으로 방어합니다.
+- **30초**: CSRF는 사용자가 로그인한 상태에서 악성 사이트가 해당 서비스에 요청을 보내면, 브라우저가 쿠키를 자동으로 포함해서 서버가 정상 요청으로 처리하는 공격입니다. `SameSite=Lax`가 기본값이라 cross-site POST는 차단되지만, 추가로 CSRF 토큰이나 Origin 검증을 조합합니다. SPA에서 Authorization 헤더를 사용하면 CSRF가 원천 차단됩니다.
+
+---
+
+# Part C. SEO 기초
+
+---
+
+## 5. SEO — meta 태그, Open Graph, Next.js Metadata API
+
+> **TL;DR** — SEO는 검색 엔진이 페이지를 이해하고 노출하는 데 필요한 기술적 기반이다. `<title>`, `<meta description>`, Open Graph, 구조화 데이터, sitemap, robots.txt가 핵심. Next.js는 Metadata API로 이를 선언적으로 관리한다.
+
+### 핵심 meta 태그
+
+```html
+<head>
+  <!-- 기본 SEO -->
+  <title>상품 이름 | 쇼핑몰</title>
+  <meta name="description" content="이 상품의 설명. 검색 결과에 표시되는 요약." />
+  <link rel="canonical" href="https://example.com/products/123" />
+
+  <!-- Open Graph (소셜 미디어 공유) -->
+  <meta property="og:title" content="상품 이름" />
+  <meta property="og:description" content="상품 설명" />
+  <meta property="og:image" content="https://example.com/og-image.jpg" />
+  <meta property="og:url" content="https://example.com/products/123" />
+  <meta property="og:type" content="product" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="상품 이름" />
+  <meta name="twitter:image" content="https://example.com/twitter-image.jpg" />
+
+  <!-- 모바일 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+```
+
+### Next.js Metadata API (App Router)
+
+```tsx
+// app/products/[id]/page.tsx
+import type { Metadata } from "next";
+
+// 정적 메타데이터
+export const metadata: Metadata = {
+  title: "상품 목록 | 쇼핑몰",
+  description: "다양한 상품을 만나보세요.",
+};
+
+// 동적 메타데이터
+export async function generateMetadata({ params }): Promise<Metadata> {
+  const product = await getProduct(params.id);
+
+  return {
+    title: `${product.name} | 쇼핑몰`,
+    description: product.description,
+    openGraph: {
+      title: product.name,
+      description: product.description,
+      images: [{ url: product.imageUrl, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: product.name,
+      images: [product.imageUrl],
+    },
+  };
+}
+
+export default async function ProductPage({ params }) {
+  const product = await getProduct(params.id);
+  return <ProductDetail product={product} />;
+}
+```
+
+### sitemap과 robots.txt
+
+```tsx
+// app/sitemap.ts — Next.js 자동 생성
+export default async function sitemap() {
+  const products = await getAllProducts();
+
+  return [
+    { url: "https://example.com", lastModified: new Date(), priority: 1 },
+    { url: "https://example.com/products", lastModified: new Date(), priority: 0.8 },
+    ...products.map((p) => ({
+      url: `https://example.com/products/${p.id}`,
+      lastModified: p.updatedAt,
+      priority: 0.6,
+    })),
+  ];
+}
+```
+
+```tsx
+// app/robots.ts
+export default function robots() {
+  return {
+    rules: [
+      { userAgent: "*", allow: "/", disallow: ["/admin/", "/api/"] },
+    ],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
+
+### 구조화 데이터 (JSON-LD)
+
+```tsx
+// 검색 엔진이 콘텐츠의 의미를 이해하게 돕는 구조화 데이터
+function ProductJsonLd({ product }) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description,
+    image: product.imageUrl,
+    offers: {
+      "@type": "Offer",
+      price: product.price,
+      priceCurrency: "KRW",
+      availability: product.inStock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+    },
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  );
+}
+```
+
+### SEO 체크리스트
+
+| 항목 | 설명 |
+|---|---|
+| `<title>` | 페이지별 고유, 60자 이내 |
+| `<meta description>` | 160자 이내, 검색 결과 요약에 표시 |
+| `<link rel="canonical">` | 중복 URL 방지 |
+| Open Graph | 소셜 공유 시 미리보기 |
+| `<meta name="viewport">` | 반응형 필수 |
+| sitemap.xml | 검색 엔진에 페이지 목록 제공 |
+| robots.txt | 크롤링 허용/차단 규칙 |
+| 구조화 데이터 | 검색 결과에 리치 스니펫 |
+| 시맨틱 HTML | `<h1>`, `<main>`, `<article>`, `<nav>` |
+| 이미지 `alt` | 검색 엔진 + 접근성 |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 상품 페이지가 검색 결과에 "React App"이라는 제목으로 노출되는 문제. CRA(CSR)로 만들어서 `<title>`이 동적으로 안 바뀌고 있었다. Next.js로 마이그레이션하면서 `generateMetadata`로 상품별 title/description/OG를 설정하니 검색 노출이 3배 증가.
+
+### 면접 압축 답변
+
+- **10초**: SEO의 기술적 기반은 title, meta description, Open Graph, sitemap, robots.txt이며, Next.js는 Metadata API로 선언적으로 관리합니다.
+- **30초**: SEO는 `<title>`, `<meta description>`, Open Graph로 검색 엔진과 소셜 미디어에 콘텐츠를 알리고, sitemap과 robots.txt로 크롤링을 제어합니다. Next.js App Router의 `generateMetadata`로 동적 페이지의 메타데이터를 서버에서 생성하면 CSR 대비 SEO가 크게 개선됩니다. 구조화 데이터(JSON-LD)로 검색 결과에 리치 스니펫을 표시할 수도 있습니다.
+
+---
+
+# Part D. React 19 신규 기능
+
+---
+
+## 6. React 19 — use, useOptimistic, useFormStatus, ref as prop
+
+> **TL;DR** — React 19는 `use()`로 Promise/Context를 직접 읽고, `useOptimistic`으로 낙관적 업데이트를 단순화하고, `useFormStatus`로 폼 제출 상태를 선언적으로 처리하며, `ref`를 prop으로 직접 전달할 수 있게 해서 `forwardRef`가 불필요해졌다.
+
+### use() — Promise와 Context를 직접 읽기
+
+`use()`는 렌더링 중에 Promise나 Context를 직접 읽을 수 있는 훅이다. Suspense와 함께 쓰면 데이터 로딩을 선언적으로 처리한다.
+
+```tsx
+import { use, Suspense } from "react";
+
+// Promise를 직접 전달
+function UserProfile({ userPromise }) {
+  const user = use(userPromise); // Suspense가 로딩 처리
+  return <h1>{user.name}</h1>;
+}
+
+function App() {
+  const userPromise = fetchUser(1); // Promise 생성
+
+  return (
+    <Suspense fallback={<p>로딩 중...</p>}>
+      <UserProfile userPromise={userPromise} />
+    </Suspense>
+  );
+}
+
+// Context도 use()로 읽기 — useContext 대체
+function ThemeButton() {
+  const theme = use(ThemeContext); // 조건부 호출도 가능!
+  return <button className={theme}>클릭</button>;
+}
+```
+
+| | `useContext` | `use(Context)` |
+|---|---|---|
+| **조건부 호출** | 불가 (hooks 규칙) | 가능 |
+| **if/for 안에서** | 불가 | 가능 |
+| **Promise 지원** | 불가 | 가능 |
+
+### useOptimistic — 낙관적 업데이트 단순화
+
+```tsx
+import { useOptimistic } from "react";
+
+function TodoList({ todos, addTodoAction }) {
+  const [optimisticTodos, addOptimisticTodo] = useOptimistic(
+    todos,
+    (currentTodos, newTodo) => [...currentTodos, { ...newTodo, pending: true }]
+  );
+
+  async function handleSubmit(formData) {
+    const newTodo = { id: Date.now(), text: formData.get("text") };
+    addOptimisticTodo(newTodo);  // 즉시 UI 반영
+    await addTodoAction(newTodo); // 서버 전송 (실패 시 자동 롤백)
+  }
+
+  return (
+    <div>
+      <form action={handleSubmit}>
+        <input name="text" />
+        <button type="submit">추가</button>
+      </form>
+      <ul>
+        {optimisticTodos.map((todo) => (
+          <li key={todo.id} style={{ opacity: todo.pending ? 0.6 : 1 }}>
+            {todo.text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+이전에는 optimistic update를 직접 구현해야 했지만(setState → 서버 호출 → 실패 시 롤백), `useOptimistic`은 서버 액션과 자연스럽게 통합된다.
+
+### useFormStatus — 폼 제출 상태
+
+```tsx
+import { useFormStatus } from "react-dom";
+
+// 폼 내부의 자식 컴포넌트에서 사용
+function SubmitButton() {
+  const { pending, data, method, action } = useFormStatus();
+
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "저장 중..." : "저장"}
+    </button>
+  );
+}
+
+function ContactForm({ submitAction }) {
+  return (
+    <form action={submitAction}>
+      <input name="message" />
+      <SubmitButton /> {/* 폼의 제출 상태를 자동으로 알 수 있음 */}
+    </form>
+  );
+}
+```
+
+`useFormStatus`는 가장 가까운 부모 `<form>`의 제출 상태를 읽는다. 이전에는 `isSubmitting` 상태를 직접 관리해야 했다.
+
+### ref as prop — forwardRef 불필요
+
+```tsx
+// React 18 이전: forwardRef 필수
+const Input = forwardRef(function Input(props, ref) {
+  return <input {...props} ref={ref} />;
+});
+
+// React 19: ref를 일반 prop으로 전달
+function Input({ ref, ...props }) {
+  return <input {...props} ref={ref} />;
+}
+
+// 사용
+function Form() {
+  const inputRef = useRef(null);
+  return <Input ref={inputRef} placeholder="입력" />;
+}
+```
+
+### React 19 변경사항 요약
+
+| 기능 | 이전 | React 19 |
+|---|---|---|
+| **Promise 읽기** | useEffect + useState | `use(promise)` + Suspense |
+| **Context 읽기** | `useContext(Ctx)` (조건부 불가) | `use(Ctx)` (조건부 가능) |
+| **낙관적 업데이트** | 직접 구현 (setState + 롤백) | `useOptimistic` |
+| **폼 제출 상태** | `isSubmitting` 직접 관리 | `useFormStatus` |
+| **ref 전달** | `forwardRef` 필수 | prop으로 직접 전달 |
+| **메모이제이션** | `useMemo`/`useCallback` 직접 | React Compiler 자동 (점진적) |
+
+### 실무 에피소드 — 이런 상황에서 만난다
+
+> 댓글 작성 시 서버 응답까지 1초 걸려서 UX가 느렸는데, `useOptimistic`을 적용하니 즉시 댓글이 표시되고 서버 실패 시 자동 롤백. 이전에는 setState + try/catch + 롤백 로직을 직접 작성했지만 코드가 절반으로 줄어듦.
+
+### 자주 하는 오해
+
+- React 19는 완전히 새로운 프레임워크다 → **하위 호환성을 유지하면서 점진적으로 도입 가능.**
+- `use()`를 쓰면 useEffect가 불필요하다 → **`use()`는 데이터 읽기용이고, 사이드 이펙트(구독, 타이머)는 여전히 useEffect.**
+- `forwardRef`가 즉시 사라진다 → **React 19에서 deprecated되지만 당장 삭제되지는 않음. 점진적 마이그레이션.**
+- React Compiler를 쓰면 성능 고민이 끝난다 → **컴파일러가 최적화하지 못하는 경우도 있으므로 원리 이해는 여전히 중요.**
+
+### 면접 압축 답변
+
+- **10초**: React 19는 `use()`로 Promise/Context를 직접 읽고, `useOptimistic`으로 낙관적 업데이트를 단순화하며, `ref`를 prop으로 직접 전달할 수 있게 합니다.
+- **30초**: React 19의 주요 변경은 `use()` 훅으로 Promise와 Context를 렌더링 중 직접 읽을 수 있고(조건부 호출도 가능), `useOptimistic`으로 서버 액션과 연계한 낙관적 업데이트를 단순화하며, `useFormStatus`로 폼 제출 상태를 선언적으로 처리하고, `ref`를 일반 prop으로 전달해 `forwardRef`가 불필요해졌다는 점입니다. React Compiler도 점진적으로 자동 메모이제이션을 지원합니다.
+
+---
+
+# 다음으로
+
+이 챕터에서 채운 4가지 이론적 공백:
+
+```
+Part A. CSS 레이아웃 — Flexbox/Grid, 반응형, 명시도, CSS 변수
+Part B. 웹 보안 — XSS 공격+방어, CSRF 공격+방어, CSP
+Part C. SEO — meta 태그, Open Graph, Next.js Metadata API, sitemap
+Part D. React 19 — use, useOptimistic, useFormStatus, ref as prop
+```
+
+**이것으로 chapter 1-13까지 프론트엔드 면접의 이론적 기반이 완성됩니다.** 남은 것은 이 내용을 본인 프로젝트 경험에 연결하고, 소리 내어 말하는 연습입니다.

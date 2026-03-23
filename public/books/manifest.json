@@ -60,6 +60,11 @@
     "title": "Ch.12 전체 챕터 누락 문항 재점검"
   },
   {
+    "id": "chapter13",
+    "filename": "chapter13.mdx",
+    "title": "Ch.13 CSS 레이아웃, 웹 보안, SEO, React 19까지"
+  },
+  {
     "id": "01-why-fiber",
     "filename": "01-why-fiber.mdx",
     "title": "Ch.1 why fiber"
