@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter, type Highlighter } from "shiki";
-import { fetchBookContent } from "@/lib/books";
-import type { BookDocument } from "@/lib/books";
+import { fetchBookContent, fetchBookList } from "@/lib/books";
+import type { BookDocument, BookEntry } from "@/lib/books";
 import { isAuthenticated } from "@/lib/auth";
 import Spinner from "./Spinner";
-import { ArrowLeft, ArrowUp, Clock3 } from "lucide-react";
+import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import Link from "next/link";
 
 type ReaderProps = {
@@ -96,6 +96,7 @@ export default function Reader({ slug }: ReaderProps) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [book, setBook] = useState<BookDocument | null>(null);
+  const [manifest, setManifest] = useState<BookEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,8 +109,11 @@ export default function Reader({ slug }: ReaderProps) {
       router.replace("/");
       return;
     }
-    fetchBookContent(slug)
-      .then(setBook)
+    Promise.all([fetchBookContent(slug), fetchBookList()])
+      .then(([bookData, list]) => {
+        setBook(bookData);
+        setManifest(list);
+      })
       .catch((e) =>
         setError(e instanceof Error ? e.message : "책을 불러올 수 없습니다"),
       )
@@ -144,6 +148,15 @@ export default function Reader({ slug }: ReaderProps) {
   }
 
   const { meta, body } = book;
+
+  const currentIndex = manifest.findIndex((entry) => entry.id === slug);
+  const prevChapter = currentIndex > 0 ? manifest[currentIndex - 1] : null;
+  const nextChapter =
+    currentIndex >= 0 && currentIndex < manifest.length - 1
+      ? manifest[currentIndex + 1]
+      : null;
+  const isFirst = currentIndex === 0;
+  const isLast = currentIndex === manifest.length - 1;
 
   return (
     <div className="min-h-[100dvh] bg-zinc-50 dark:bg-zinc-900">
@@ -244,6 +257,65 @@ export default function Reader({ slug }: ReaderProps) {
               {body}
             </ReactMarkdown>
           </div>
+
+          {/* Chapter Navigation */}
+          {manifest.length > 0 && (
+            <nav className="mt-12 mb-8 flex items-stretch gap-3 border-t border-zinc-200 pt-8 dark:border-zinc-700">
+              {/* Previous Chapter */}
+              {prevChapter ? (
+                <Link
+                  href={`/read/${prevChapter.id}`}
+                  className="group flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-zinc-200 px-4 py-4 transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
+                >
+                  <ChevronLeft className="size-5 shrink-0 text-zinc-400 transition group-hover:text-zinc-600 dark:group-hover:text-zinc-300" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                      이전 챕터
+                    </p>
+                    <p className="truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      {prevChapter.title}
+                    </p>
+                  </div>
+                </Link>
+              ) : (
+                <div className="flex min-w-0 flex-1 cursor-not-allowed items-center gap-2 rounded-2xl border border-zinc-100 px-4 py-4 opacity-40 dark:border-zinc-800">
+                  <ChevronLeft className="size-5 shrink-0 text-zinc-300 dark:text-zinc-600" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-zinc-300 dark:text-zinc-600">
+                      이전 챕터
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Chapter */}
+              {nextChapter ? (
+                <Link
+                  href={`/read/${nextChapter.id}`}
+                  className="group flex min-w-0 flex-1 items-center justify-end gap-2 rounded-2xl border border-zinc-200 px-4 py-4 text-right transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-zinc-400 dark:text-zinc-500">
+                      다음 챕터
+                    </p>
+                    <p className="truncate text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      {nextChapter.title}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-5 shrink-0 text-zinc-400 transition group-hover:text-zinc-600 dark:group-hover:text-zinc-300" />
+                </Link>
+              ) : (
+                <div className="flex min-w-0 flex-1 cursor-not-allowed items-center justify-end gap-2 rounded-2xl border border-zinc-100 px-4 py-4 opacity-40 dark:border-zinc-800">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-zinc-300 dark:text-zinc-600">
+                      다음 챕터
+                    </p>
+                  </div>
+                  <ChevronRight className="size-5 shrink-0 text-zinc-300 dark:text-zinc-600" />
+                </div>
+              )}
+            </nav>
+          )}
         </article>
       </div>
       <button
