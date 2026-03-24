@@ -113,5 +113,55 @@
     "id": "coxwave",
     "filename": "coxwave.mdx",
     "title": "Coxwave 과제 면접 질문 리스트"
+  },
+  {
+    "id": "js-20",
+    "filename": "js-20.mdx",
+    "title": "js20문항"
+  },
+  {
+    "id": "ts-20",
+    "filename": "ts-20.mdx",
+    "title": "ts20문항"
+  },
+  {
+    "id": "react-20",
+    "filename": "react-20.mdx",
+    "title": "react20문항"
+  },
+  {
+    "id": "nextjs-20",
+    "filename": "nextjs-20.mdx",
+    "title": "nextjs20문항"
+  },
+  {
+    "id": "test-20",
+    "filename": "test-20.mdx",
+    "title": "테스트 20문항"
+  },
+  {
+    "id": "cs-20",
+    "filename": "cs-20.mdx",
+    "title": "cs 20문항"
+  },
+  {
+    "id": "network-20",
+    "filename": "network-20.mdx",
+    "title": "네트워크 20문항"
+  },
+  {
+    "id": "infra-20",
+    "filename": "infra-20.mdx",
+    "title": "인프라 20문항"
+  },
+  {
+    "id": "web-performance-20",
+    "filename": "web-performance-20.mdx",
+    "title": "웹 성능 20문항"
+  },
+  {
+    "id": "project-custom-20",
+    "filename": "project-custom-20.mdx",
+    "title": "프로젝트 맞춤 20문항"
   }
 ]

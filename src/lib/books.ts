@@ -10,6 +10,7 @@ export type BookDocumentMeta = {
   summary?: string;
   estimatedReadMinutes?: number;
   learningGoals: string[];
+  keyQuestions?: string[];
 };
 
 export type BookDocument = {
@@ -59,7 +60,7 @@ function stripQuotes(value: string): string {
 
 function parseBookDocument(raw: string): BookDocument {
   const match = raw.match(FRONTMATTER_RE);
-  const meta: BookDocumentMeta = { learningGoals: [] };
+  const meta: BookDocumentMeta = { learningGoals: [], keyQuestions: [] };
 
   if (!match) {
     return {
@@ -68,7 +69,7 @@ function parseBookDocument(raw: string): BookDocument {
     };
   }
 
-  let currentListKey: keyof Pick<BookDocumentMeta, "learningGoals"> | null = null;
+  let currentListKey: keyof Pick<BookDocumentMeta, "learningGoals" | "keyQuestions"> | null = null;
 
   for (const line of match[1].split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -79,7 +80,7 @@ function parseBookDocument(raw: string): BookDocument {
 
     const listItem = trimmed.match(/^-\s+(.*)$/);
     if (listItem && currentListKey) {
-      meta[currentListKey].push(stripQuotes(listItem[1]));
+      meta[currentListKey]!.push(stripQuotes(listItem[1]));
       continue;
     }
 
@@ -96,6 +97,12 @@ function parseBookDocument(raw: string): BookDocument {
     if (key === "learningGoals") {
       meta.learningGoals = [];
       currentListKey = "learningGoals";
+      continue;
+    }
+
+    if (key === "keyQuestions") {
+      meta.keyQuestions = [];
+      currentListKey = "keyQuestions";
       continue;
     }
 

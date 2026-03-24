@@ -1,0 +1,102 @@
+[
+  {
+    "id": 0,
+    "question": "1. TypeScript를 사용하는 가장 큰 이유를 말해보세요. 단순한 자동완성 말고 팀 생산성 관점에서 설명해보세요.",
+    "answer": "TypeScript의 가장 큰 가치는 자동완성이 아니라 협업 비용을 줄이는 데 있습니다. 함수, 컴포넌트, API 응답, 도메인 모델의 계약을 타입으로 명시해두면, 다른 개발자가 문서를 따로 읽지 않아도 호출 규칙과 데이터 형태를 코드에서 바로 확인할 수 있습니다. 이 함수가 null을 반환할 수 있는지, 이 prop이 필수인지, 서버 응답에 어떤 필드가 오는지 같은 것들을 문서나 구두로만 관리하면 사람이 바뀌거나 코드가 커질수록 금방 틀어집니다. TypeScript는 이런 암묵적 합의를 코드 표면에 고정시켜줍니다. 리팩터링할 때도 영향 범위를 빠르게 찾을 수 있고, 잘못된 사용을 컴파일 단계에서 막아서 리뷰와 QA 비용이 줄어듭니다. 결국 TypeScript는 문서 대체재라기보다 실행 가능한 계약서 역할을 하는 것이고, 팀 규모가 커질수록 그 효과가 더 뚜렷해집니다."
+  },
+  {
+    "id": 1,
+    "question": "2. interface와 type의 차이를 설명하고, 각각 언제 선호하는지 말해보세요.",
+    "answer": "interface와 type은 대부분의 객체 형태를 둘 다 표현할 수 있어서 매우 비슷합니다. 핵심 차이는 두 가지입니다. 첫째, interface는 declaration merging이 가능해서 같은 이름으로 다시 열어 필드를 추가할 수 있지만, type은 그렇게 할 수 없습니다. 이 특성 덕분에 라이브러리 확장이나 전역 타입 보강에는 interface가 유리합니다. 둘째, type은 유니온, 인터섹션, 튜플, primitive alias, 조건부 타입 같은 더 넓은 범위의 타입 표현이 가능합니다. 실무에서 저는 이런 기준을 씁니다. 도메인 객체나 공용 인터페이스처럼 이름이 있는 객체 계약은 interface로, `type Status = 'idle' | 'loading' | 'success' | 'error'` 같은 유니온이나 기존 타입을 조합하는 경우는 type으로 선언합니다. 중요한 건 무조건 하나가 낫다고 단정하지 않고, 용도에 맞게 일관된 기준을 가지는 것입니다."
+  },
+  {
+    "id": 2,
+    "question": "3. any, unknown, never의 차이를 설명해보세요.",
+    "answer": "이 세 타입은 TypeScript 타입 시스템의 양 끝과 경계를 나타냅니다. any는 타입 검사를 사실상 꺼버리는 타입입니다. 어떤 연산이든 허용되지만 그만큼 타입 시스템의 보호를 완전히 잃습니다. unknown은 무엇이든 들어올 수 있지만 바로 사용할 수는 없는 타입입니다. typeof 체크나 사용자 정의 타입 가드로 narrowing한 뒤에만 안전하게 사용할 수 있습니다. 쉽게 말해서 any는 검사 포기이고 unknown은 아직 모른다는 의미입니다. never는 절대 발생하지 않아야 하는 상태를 나타냅니다. 모든 분기를 다 처리한 뒤 남는 불가능한 경우이거나, 항상 throw하는 함수의 반환 타입에 사용됩니다. switch문에서 exhaustive check를 할 때 default에서 `const _exhaustive: never = value`를 쓰면, 새로운 케이스가 추가됐는데 처리하지 않으면 컴파일 에러가 나서 누락을 방지할 수 있습니다. 실무에서는 외부 입력은 unknown으로 받고, any는 가장 좁은 범위에서만 쓰며, never는 exhaustive check에 활용하는 편입니다."
+  },
+  {
+    "id": 3,
+    "question": "4. 제네릭이 왜 필요한지 설명하고, 직접 설계했던 제네릭 예시를 말해보세요.",
+    "answer": "제네릭은 타입 정보를 잃지 않으면서 재사용 가능한 로직을 만들기 위해 필요합니다. 구체 타입을 미리 박아두면 재사용성이 떨어지고, any로 열어두면 타입 안전성이 사라지는데, 제네릭은 호출 시점의 타입을 그대로 전달하면서 두 문제를 모두 해결합니다. 예를 들어 `function identity<T>(value: T): T`처럼 작성하면 입력 타입이 출력까지 정확하게 연결됩니다. 실무에서는 API 응답 래퍼를 `type ApiResponse<T> = { data: T; error: string | null }`로 만들어서 다양한 엔드포인트에 재사용하거나, Select 컴포넌트의 props를 `SelectProps<TValue>`로 설계해서 옵션 값의 타입을 호출 시점에 결정하도록 했습니다. 다만 제네릭을 과하게 쓰면 오히려 추론이 나빠지고 코드가 복잡해질 수 있습니다. TypeScript 공식 문서도 타입 파라미터 수를 최소화하고, 호출자가 타입을 명시하지 않아도 inference가 잘 되게 설계하라고 권장합니다. 진짜 관계를 표현할 때만 제네릭을 쓰는 게 좋습니다."
+  },
+  {
+    "id": 4,
+    "question": "5. 유니온 타입과 인터섹션 타입의 차이를 설명해보세요.",
+    "answer": "유니온 타입은 여러 타입 중 하나일 수 있는 값을 표현하고, 인터섹션 타입은 여러 타입을 동시에 만족해야 하는 값을 표현합니다. `string | number`는 문자열이거나 숫자인 값이고, `User & Auditable`은 User의 속성과 Auditable의 속성을 모두 가진 객체입니다. 유니온은 상태 분기나 여러 입력 케이스를 모델링할 때 많이 씁니다. `type Status = 'idle' | 'loading' | 'success' | 'error'`처럼 상태 머신이나 variant props를 표현하기 좋습니다. 인터섹션은 기존 타입들을 합성해서 더 풍부한 타입을 만들 때 씁니다. 공통 메타 정보를 합치거나 여러 mixin을 결합할 때 유용합니다. 여기서 중요한 건 유니온 타입을 사용할 때는 반드시 narrowing이 따라와야 한다는 점입니다. TypeScript는 유니온 상태에서는 공통 멤버만 접근할 수 있기 때문에, typeof나 in 같은 가드로 좁혀야 구체적인 타입의 멤버에 안전하게 접근할 수 있습니다. 유니온은 분기, 인터섹션은 합성이라고 기억하면 됩니다."
+  },
+  {
+    "id": 5,
+    "question": "6. 타입 가드가 무엇인지 설명하고, 사용자 정의 타입 가드를 작성해본 경험을 말해보세요.",
+    "answer": "타입 가드는 런타임 체크를 통해 TypeScript가 더 구체적인 타입으로 좁혀서 이해할 수 있게 만드는 코드 패턴입니다. typeof, instanceof, in, truthiness check 같은 기본 가드가 있고, 직접 `value is SomeType` 형태의 사용자 정의 타입 가드도 만들 수 있습니다. 예를 들어 API 응답을 unknown으로 받은 뒤 `function isUser(value: unknown): value is User`처럼 작성하면, 이 함수 안에서 typeof와 in 체크를 통해 필요한 필드가 있는지 검사하고, 이 함수를 통과하면 TypeScript가 해당 값을 User 타입으로 인식합니다. 이 방식은 `as User`처럼 강제 assertion으로 밀어붙이는 것보다 안전합니다. 런타임 체크와 타입 추론이 연결되고, 검증 로직을 재사용 가능한 함수로 분리할 수 있기 때문입니다. 실무에서는 백엔드 응답이 타입 정의와 어긋나는 경우가 종종 있어서, 경계에서 unknown으로 받고 사용자 정의 타입 가드나 Zod 같은 도구로 좁히는 방식을 선호했습니다. 추가로 `asserts value is T` 형태의 assertion function도 있어서 검증 실패 시 throw하는 패턴에도 활용할 수 있습니다."
+  },
+  {
+    "id": 6,
+    "question": "7. extends, keyof, typeof, in을 활용한 타입 설계 경험을 설명해보세요.",
+    "answer": "이 연산자들은 TypeScript에서 기존 값이나 타입을 기반으로 새로운 타입을 만들 때 핵심적인 도구입니다. keyof는 객체 타입의 키들을 리터럴 유니온으로 만들어주고, typeof는 런타임 값에서 타입을 추출합니다. 이 둘을 조합하면 상수 객체에서 key union과 value union을 한 번에 뽑을 수 있습니다. 예를 들어 `const STATUS = { idle: 'IDLE', loading: 'LOADING' } as const`에서 `keyof typeof STATUS`로 키 유니온을, `(typeof STATUS)[keyof typeof STATUS]`로 값 유니온을 만들 수 있습니다. in은 mapped type에서 키를 순회할 때 쓰이는데, `type Flags<T> = { [K in keyof T]: boolean }`처럼 기존 타입의 모든 필드를 boolean으로 바꾸는 식입니다. extends는 제네릭 제약에서 `T extends object`처럼 입력 타입을 제한하거나, 조건부 타입에서 분기할 때 사용합니다. 이 도구들의 핵심 목적은 중복 타입 선언을 줄이고 실제 값과 타입이 어긋나지 않게 동기화하는 것입니다. 참고로 in은 런타임에서 narrowing 연산자로도 쓰이고 타입 레벨 mapped type에서도 쓰인다는 점을 구분해두면 좋습니다."
+  },
+  {
+    "id": 7,
+    "question": "8. Partial, Required, Pick, Omit, Record 같은 유틸리티 타입을 언제 어떻게 쓰는지 설명해보세요.",
+    "answer": "유틸리티 타입은 기존 타입을 다시 선언하지 않고 상황에 맞게 변형할 때 사용합니다. Partial<T>는 모든 필드를 optional로 만들어서 수정 폼이나 PATCH 요청 payload에 적합합니다. Required<T>는 반대로 모든 필드를 필수로 만들어서 서버에서 정규화가 완료된 결과를 표현할 때 유용합니다. Pick<T, Keys>는 필요한 필드만 추출하고 Omit<T, Keys>는 특정 필드를 제외해서, 카드 UI용 요약 데이터나 내부에서 숨길 필드를 제거할 때 씁니다. Record<Keys, Value>는 키 유니온을 값 타입으로 매핑하는 사전 형태를 만들 때 사용합니다. 실무에서는 같은 도메인 모델을 생성 요청, 수정 요청, UI 표시용, 캐시 키 구조로 나눌 때 유틸리티 타입을 많이 활용했습니다. 핵심은 새 타입을 계속 복사-붙여넣기하지 않고 원본 타입과의 관계를 유지한 채 파생시키는 것입니다. 다만 유틸리티 타입을 과도하게 중첩하면 원본과 너무 멀어져서 가독성이 떨어질 수 있으니 적절한 균형이 필요합니다."
+  },
+  {
+    "id": 8,
+    "question": "9. 옵셔널 프로퍼티와 undefined 허용은 어떤 차이가 있나요?",
+    "answer": "얼핏 비슷해 보이지만 객체 shape 관점에서 의미가 다릅니다. `foo?: string`은 프로퍼티 자체가 아예 없을 수도 있다는 뜻이고, `foo: string | undefined`는 프로퍼티는 반드시 존재하지만 값이 undefined일 수 있다는 뜻입니다. 그래서 `type A = { foo?: string }`은 빈 객체 `{}`가 가능하지만, `type B = { foo: string | undefined }`는 `{ foo: undefined }`는 되어도 `{}`는 안 됩니다. 이 차이가 중요한 이유는 상태의 의미가 달라지기 때문입니다. foo가 optional이면 아직 입력되지 않았거나 아예 선택 사항인 필드이고, foo가 undefined를 허용하는 거면 필드는 항상 있지만 아직 값이 비어 있는 상태입니다. 폼 초기값, API payload, 설정 객체에서 미입력과 명시적으로 비움을 구분해야 할 때 이 차이가 실무적으로 중요합니다. 직렬화나 spread, in 체크에서도 동작이 달라질 수 있습니다. TypeScript에는 exactOptionalPropertyTypes 옵션도 있어서, optional 프로퍼티에 undefined를 명시적으로 할당하는 것을 막을 수 있습니다."
+  },
+  {
+    "id": 9,
+    "question": "10. 함수 오버로드와 유니온 파라미터 중 어떤 방식을 언제 선택하나요?",
+    "answer": "기본적으로 입력 타입이 여러 개이더라도 반환 타입이나 사용 방식이 크게 달라지지 않으면 유니온 파라미터를 선호합니다. `function len(value: string | any[]) { return value.length; }`처럼 단순한 경우에는 유니온이 더 간결하고 이해하기 쉽습니다. 오버로드는 입력 형태에 따라 반환 타입이 달라지거나, 호출 시그니처를 명확히 분리해서 문서화할 필요가 있을 때 선택합니다. 예를 들어 string을 넣으면 number를 반환하고, number를 넣으면 string을 반환하는 함수라면 오버로드로 시그니처를 분리해야 호출 측에서 정확한 타입 추론을 받을 수 있습니다. TypeScript 공식 문서도 같은 개수의 매개변수와 같은 반환 타입이면 오버로드보다 유니온을 선호하라고 안내합니다. 오버로드를 과하게 쓰면 구현과 사용 모두 복잡해지고, union 값을 그대로 넘길 때 호출이 불편해질 수 있기 때문입니다. 결론적으로 가능한 한 유니온이나 제네릭으로 단순하게 유지하고, 오버로드는 호출 경험을 명확하게 만들 필요가 있을 때만 사용하는 게 좋습니다."
+  },
+  {
+    "id": 10,
+    "question": "11. 좁혀지기(narrowing)가 어떻게 이뤄지는지 설명해보세요.",
+    "answer": "TypeScript의 narrowing은 런타임 제어 흐름을 분석해서 타입을 더 구체적으로 추론하는 과정입니다. typeof, instanceof, in, equality check, truthiness check, early return 같은 코드 구조를 보고 control flow analysis를 통해 타입을 줄여갑니다. 예를 들어 `function print(value: string | number)` 안에서 `if (typeof value === 'string')` 블록에서는 value가 string으로 좁혀지고, return 이후에는 number로 좁혀집니다. 중요한 건 narrowing이 단순히 typeof만이 아니라 코드의 도달 가능성(reachability)까지 분석한다는 점입니다. if문에서 return이 있으면 아래 코드에는 해당 타입이 제거된 상태로 추론됩니다. 이 메커니즘을 잘 이해하면 유니온 타입이나 unknown을 안전하게 다룰 수 있고, as로 강제 assertion하는 것을 줄일 수 있습니다. 실무에서는 narrowing을 잘 설계하는 게 타입 안전한 코드를 작성하는 가장 자연스러운 방법이라고 생각합니다. 사용자 정의 타입 가드를 만들어서 복잡한 narrowing 로직을 재사용 가능한 함수로 분리하는 것도 좋은 패턴입니다."
+  },
+  {
+    "id": 11,
+    "question": "12. as const는 왜 필요하고, 어디서 유용한가요?",
+    "answer": "as const는 리터럴 값을 가능한 한 가장 구체적인 타입으로 고정하고 readonly로 다루게 해주는 문법입니다. as const가 없으면 `const arr = ['idle', 'loading']`은 `string[]`으로 넓혀지지만, `as const`를 붙이면 `readonly ['idle', 'loading']`이 되어 각 요소가 리터럴 타입으로 유지됩니다. 이 특성 덕분에 값 정의를 타입의 출발점으로 바꿀 수 있습니다. 대표적으로 상수 배열에서 `(typeof STATUS)[number]`로 유니온 타입을 뽑거나, 상수 객체에서 keyof typeof로 key union을 뽑는 패턴이 있습니다. 실무에서는 variant 목록, route name 상수, action type 상수, 권한 코드, select 옵션의 value 집합 같은 곳에서 많이 사용합니다. 이런 패턴을 활용하면 enum 대신 const object + as const + union literal 조합으로 enum-like pattern을 만들 수 있어서, 값과 타입을 한 곳에서 관리하면서도 JavaScript 친화적인 코드를 유지할 수 있습니다."
+  },
+  {
+    "id": 12,
+    "question": "13. 리터럴 타입을 활용하면 어떤 이점이 있나요?",
+    "answer": "리터럴 타입을 쓰면 허용 가능한 값의 범위를 정확하게 제한할 수 있어서, 잘못된 문자열이나 숫자 값 사용을 컴파일 단계에서 막을 수 있습니다. 예를 들어 `type ButtonVariant = 'primary' | 'secondary' | 'ghost'`로 정의하면 `'primray'` 같은 오타를 바로 잡아냅니다. 리터럴 타입이 진짜 강력해지는 건 discriminated union과 결합할 때입니다. `type Result = { status: 'success'; data: string[] } | { status: 'error'; message: string }`처럼 정의하면 status 값을 기준으로 분기할 때 TypeScript가 자동으로 나머지 필드의 타입을 좁혀줍니다. 이건 단순한 값 제약을 넘어서 상태 머신을 코드로 표현하는 도구입니다. 실무에서는 상태값, API 응답 상태, 컴포넌트 variant, action type 같은 닫힌 집합을 리터럴 유니온으로 고정해서 오타와 잘못된 상태 전이를 많이 줄였습니다. 문자열을 자유 입력으로 두는 것보다 리터럴로 닫아두면 exhaustive check도 가능해져서 새로운 케이스가 추가됐을 때 처리 누락을 컴파일 타임에 발견할 수 있습니다."
+  },
+  {
+    "id": 13,
+    "question": "14. Zod 같은 런타임 스키마 검증 도구가 TypeScript만으로 해결되지 않는 어떤 문제를 해결해주나요?",
+    "answer": "TypeScript는 컴파일타임 타입 시스템이라서 코드를 작성하는 시점에서의 안전성만 보장하고, 실제 런타임에 들어오는 값이 타입과 맞는지는 확인하지 못합니다. 타입 정보는 빌드할 때 전부 사라지기 때문입니다. 예를 들어 `const data = await response.json() as User`라고 쓰면 컴파일은 되지만, 서버가 `{ id: 123 }`을 보내도 아무 경고 없이 통과됩니다. Zod 같은 도구는 이 간극을 메워줍니다. 스키마를 정의하고 parse를 호출하면 실제 값이 규칙에 맞는지 런타임에서 검사하고, 맞지 않으면 에러를 던집니다. 네트워크 응답, 폼 입력, localStorage, querystring처럼 외부에서 들어오는 값은 항상 신뢰할 수 없기 때문에 이런 경계 구간에서 검증이 필요합니다. TypeScript가 이렇게 사용하라는 계약을 설명한다면, Zod는 실제로 지금 들어온 값이 그 계약을 만족하는지 확인하는 것입니다. 둘은 대체 관계가 아니라 보완 관계입니다."
+  },
+  {
+    "id": 14,
+    "question": "15. API 응답 타입을 신뢰하지 않고 검증해야 하는 이유를 설명해보세요.",
+    "answer": "API 타입 정의는 우리 코드 안의 기대치일 뿐이고, 실제 런타임 응답은 여러 이유로 어긋날 수 있습니다. 백엔드 hotfix로 필드가 바뀌거나, API 버전 불일치가 생기거나, optional이었던 필드가 nullable 정책 변경으로 null이 오거나, 문자열이어야 할 값이 숫자로 오는 경우가 실무에서 실제로 발생합니다. 컴파일타임에 맞아 보인다고 해서 런타임까지 맞다고 가정하면 위험합니다. 특히 프론트엔드는 외부 시스템의 데이터를 소비하는 쪽이기 때문에, 경계 구간에서 검증하는 것이 방어적 설계의 기본입니다. 내부 함수끼리는 타입을 신뢰해도 되지만, 네트워크 응답, 스토리지, URL 파라미터, 사용자 입력처럼 시스템 경계 바깥에서 들어오는 값은 기본적으로 신뢰하지 않는다는 관점으로 설계하는 것이 좋습니다. 실무에서는 중요한 화면 진입 데이터나 결제, 권한, 설정값 같은 핵심 응답은 Zod 같은 도구로 더 엄격하게 검증하는 편입니다."
+  },
+  {
+    "id": 15,
+    "question": "16. TypeScript에서 \"타입은 맞는데 런타임에서 깨지는 문제\"의 예를 들어보세요.",
+    "answer": "가장 대표적인 예는 잘못된 type assertion입니다. `const user = (await response.json()) as { name: string }`이라고 쓰면 컴파일은 되지만, 실제 응답이 빈 객체면 `user.name.toUpperCase()`에서 바로 런타임 에러가 납니다. as는 컴파일러를 설득하는 행위일 뿐 실제 검증이 아니기 때문입니다. 두 번째 예는 localStorage에서 JSON.parse한 결과를 as로 캐스팅하는 경우입니다. Date 타입이어야 할 필드가 실제로는 문자열인데 `getTime()`을 호출하면 바로 깨집니다. 세 번째는 non-null assertion으로 밀어붙이는 경우입니다. `props.onSubmit!(data)`처럼 느낌표를 썼는데 실제로 undefined면 런타임 에러입니다. 이런 문제들의 공통점은 타입 선언이 사실을 만드는 게 아니라 가정을 표현하는 경우가 많다는 것입니다. TypeScript는 실행 전에 코드를 검사하는 도구이지, 런타임 데이터 자체를 교정하는 도구는 아니라는 점을 항상 염두에 두고, 외부 경계에서는 assertion 대신 narrowing이나 런타임 검증을 사용하는 것이 안전합니다."
+  },
+  {
+    "id": 16,
+    "question": "17. enum, union literal, const object 패턴 중 무엇을 선호하는지와 이유를 말해보세요.",
+    "answer": "실무에서는 union literal과 const object 패턴을 더 선호합니다. `export const STATUS = { idle: 'idle', loading: 'loading', success: 'success', error: 'error' } as const`로 정의하고 `type Status = (typeof STATUS)[keyof typeof STATUS]`로 타입을 뽑으면, 값과 타입이 한 곳에 붙어 있고 직관적이며 JavaScript 친화적입니다. 문자열 기반 직렬화에도 자연스럽고, tree-shaking이나 번들 관점에서도 예측하기 쉽습니다. enum도 장점은 있습니다. 외부 시스템과 고정 상수 집합을 강하게 묶고 싶을 때는 유용할 수 있습니다. 하지만 enum은 코드를 생성하는 방식이 팀원 모두 정확히 이해해야 하고, 숫자 enum은 역방향 매핑 때문에 의도치 않은 동작이 생길 수 있습니다. 단순한 상태값이나 UI variant 수준에서는 과한 경우가 많았습니다. 그래서 닫힌 문자열 집합은 union literal로, 실제 상수 맵이 필요하면 const object 패턴으로, 정말 외부 시스템 연동이 필요한 경우에만 enum을 검토하는 식으로 판단하고 있습니다."
+  },
+  {
+    "id": 17,
+    "question": "18. 공용 컴포넌트나 훅을 만들 때 타입 설계에서 가장 중요하게 보는 기준은 무엇인가요?",
+    "answer": "가장 중요하게 보는 기준은 사용자가 최대한 적게 고민해도 안전하게 쓸 수 있는 타입인가입니다. 공용 컴포넌트나 훅은 내부 구현의 정교함보다 외부 API의 일관성과 예측 가능성이 더 중요합니다. 구체적으로 저는 다섯 가지를 봅니다. 첫째, inference가 잘 되어서 호출 시 타입을 명시하지 않아도 되는가. 둘째, 잘못된 사용을 자연스럽게 막는 구조인가. 셋째, 에러 메시지가 읽을 만한 수준인가. 넷째, 리팩터링에 강한가. 다섯째, 구현 세부사항이 외부 타입에 새어나오지 않는가. 예를 들어 `useFetch<T>()`의 반환 타입을 단순히 `{ data: T | undefined; loading: boolean; error: Error | undefined }`로 하는 것보다, `type AsyncState<T> = { status: 'loading' } | { status: 'error'; error: Error } | { status: 'success'; data: T }`처럼 discriminated union으로 반환하면 소비자가 status를 기준으로 안전하게 분기할 수 있습니다. 타입 설계의 목표는 구현자 편의가 아니라 사용자 경험입니다."
+  },
+  {
+    "id": 18,
+    "question": "19. 모노레포 환경에서 타입 공유를 할 때 어떤 문제를 겪을 수 있고 어떻게 관리하나요?",
+    "answer": "모노레포에서 타입 공유는 편리하지만 여러 문제가 생길 수 있습니다. 패키지 간 순환 의존이 생기거나, 빌드 순서가 꼬이거나, path alias와 실제 해석 경로가 불일치하거나, 타입만 공유하려다 런타임 코드까지 얽히는 경우가 자주 있습니다. 프로젝트가 커지면 타입 체크와 에디터 반응 속도가 느려지는 것도 큰 문제입니다. 에디터가 전체 프로젝트의 타입 그래프를 로드하면서 무거워질 수 있습니다. 관리 방법으로는 먼저 공용 타입 패키지를 명확히 분리하고, 도메인별로 public export만 노출합니다. 앱 전용 타입과 공통 계약 타입을 분리해서 아무 타입이나 다 공유하는 것을 피합니다. TypeScript의 project references와 composite, incremental 설정으로 빌드 단위를 관리하면 전체 레포를 재빌드하는 비용을 줄일 수 있습니다. disableReferencedProjectLoad 같은 옵션으로 에디터 성능도 개선할 수 있습니다. 경험상 경계를 나눠서 계약 타입만 공유하는 쪽이 유지보수에 훨씬 유리했습니다."
+  },
+  {
+    "id": 19,
+    "question": "20. 복잡한 폼/설정 객체를 다룰 때 TypeScript와 Zod를 함께 썼다면, 각각의 역할을 어떻게 나눴는지 설명해보세요.",
+    "answer": "TypeScript는 개발 중에 폼 값 구조, 컴포넌트 props, submit payload, 내부 helper 함수 간의 계약을 안전하게 유지하는 역할을 맡기고, Zod는 실제 사용자 입력이나 서버에서 복구한 설정값이 유효한지 런타임에서 검증하는 역할을 맡겼습니다. 실무에서는 Zod schema를 기준으로 `z.infer<typeof schema>`로 타입을 파생시켜서 스키마와 타입의 중복 선언을 없앴습니다. 이렇게 하면 검증 규칙을 바꾸면 타입도 자동으로 따라옵니다. submit 직전이나 초기 데이터 복원 시점에 `parse` 또는 `safeParse`로 검증하는 구조를 주로 사용했습니다. 복잡한 폼일수록 정적 타입만 맞는 상태와 실제 입력값이 유효한 상태를 분리해서 봐야 합니다. 폼을 작성하는 동안에는 일부 필드가 비어 있을 수 있어서 느슨함이 필요하지만, submit 경계에서는 모든 필드가 유효해야 하는 엄격함이 필요합니다. TypeScript가 작성 중 실수를 줄여주고, Zod가 제출 시점의 유효성을 보장해주는 식으로 역할을 나누면 매우 효과적이었습니다."
+  }
+]

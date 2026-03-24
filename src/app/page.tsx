@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import LoginForm from "@/components/LoginForm";
-import BookList from "@/components/BookList";
+import MainMenu from "@/components/MainMenu";
 import { isAuthenticated } from "@/lib/auth";
 import Spinner from "@/components/Spinner";
 
@@ -25,5 +25,5 @@ export default function Home() {
     return <LoginForm />;
   }
 
-  return <BookList />;
+  return <MainMenu />;
 }

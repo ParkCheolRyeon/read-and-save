@@ -72,3 +72,24 @@ body {
     background-color: var(--shiki-dark-bg) !important;
   }
 }
+
+/* ── Global word-break ── */
+
+body {
+  word-break: keep-all;
+}
+
+/* ── Flashcard ── */
+
+.card-answer-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Swiper slide height fix */
+.swiper {
+  height: 100%;
+}
+.swiper-slide {
+  height: auto !important;
+}
