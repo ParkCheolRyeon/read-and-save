@@ -104,8 +104,7 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 
 ### 면접 압축 답변
 
-- **10초**: Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 사용자 경험을 측정하며, 성능 최적화는 측정부터 시작해야 합니다.
-- **30초**: 성능 최적화는 측정 → 분해 → 개선 → 재측정 순서로 합니다. Core Web Vitals의 LCP(2.5초 이하), INP(200ms 이하), CLS(0.1 이하)가 핵심 기준이며, 필드 데이터(CrUX, web-vitals)로 실제 문제를 발견하고 실험실 데이터(Lighthouse, DevTools)로 디버깅합니다.
+성능 최적화는 감이 아니라 **측정부터** 시작해야 합니다. **Core Web Vitals**는 사용자의 "느리다"를 세 가지 숫자로 분해하는데, **LCP**(2.5초 이하)는 주요 콘텐츠가 보이는 속도, **INP**(200ms 이하)는 클릭이나 입력에 대한 반응성, **CLS**(0.1 이하)는 레이아웃이 갑자기 밀리지 않는 안정성을 측정합니다. 실무에서는 **필드 데이터**(CrUX, web-vitals)로 실제 사용자 환경의 문제를 발견하고, **실험실 데이터**(Lighthouse, DevTools)로 원인을 디버깅하는 식으로 두 가지를 함께 봐야 합니다. 측정 → 분해 → 개선 → 재측정, 이 순서를 지켜야 엉뚱한 곳에 시간을 낭비하지 않습니다.
 
 ---
 
@@ -143,8 +142,7 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 
 ### 면접 압축 답변
 
-- **10초**: LCP는 뷰포트에서 가장 큰 콘텐츠의 렌더링 완료 시점이며, TTFB, 리소스 우선순위, 렌더 차단이 복합 원인입니다.
-- **30초**: LCP는 사용자가 "페이지가 떴다"고 느끼는 순간과 가장 잘 맞는 지표입니다. 서버 응답, 리소스 발견 시점, 다운로드 우선순위, 렌더 차단을 함께 봐야 하며, LCP 이미지에 lazy loading을 걸면 오히려 악화됩니다. `fetchpriority="high"`나 `preload`로 우선 로딩하는 것이 핵심입니다.
+**LCP**는 뷰포트에서 가장 큰 콘텐츠가 렌더링 완료되는 시점으로, 사용자가 "페이지가 떴다"고 느끼는 순간과 가장 잘 맞는 지표입니다. LCP가 느려지는 원인은 하나가 아니라 **TTFB**(서버 응답 지연), **리소스 발견 시점**, **다운로드 우선순위**, **렌더 차단 CSS/JS**가 복합적으로 작용합니다. 특히 주의할 점은 LCP 이미지에 `loading="lazy"`를 걸면 오히려 악화된다는 것인데, 대신 `fetchpriority="high"`나 `<link rel="preload">`로 우선 로딩해야 합니다.
 
 ---
 
@@ -164,15 +162,13 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 | 원인 | 개선 |
 |---|---|
 | 긴 JS 작업 (Long Task) | `setTimeout`/`scheduler.yield()`로 쪼개기 |
+| 무거운 렌더 계산 | `startTransition`으로 urgent/non-urgent 분리 |
+| 큰 리스트 재계산 | virtualization, 상태 범위 축소 |
+| 무거운 JSON 파싱 | Web Worker로 오프로드 |
 
 > 50ms가 기준인 이유: 60fps 기준 한 프레임이 약 16ms이고, 사용자 입력 처리까지 고려하면 50ms가 '버벅임'을 느끼는 임계점이다.
 
-| 무거운 렌더 계산 | `startTransition`으로 urgent/non-urgent 분리 |
-
 > startTransition은 React 18이 도입한 '급한 업데이트(사용자 입력)와 덜 급한 업데이트(화면 전환)를 분리'하는 메커니즘이다.
-
-| 큰 리스트 재계산 | virtualization, 상태 범위 축소 |
-| 무거운 JSON 파싱 | Web Worker로 오프로드 |
 
 ```tsx
 // 나쁜 예: 클릭 핸들러에서 무거운 동기 작업
@@ -181,13 +177,19 @@ function handleClick() {
   setItems(filtered);
 }
 
-// 개선: startTransition으로 분리
-function handleClick() {
-  setIsLoading(true);
-  startTransition(() => {
-    setItems(hugeList.filter(complexFilter).sort(complexSort));
-    setIsLoading(false);
-  });
+// 개선: useTransition으로 분리
+function SearchResults({ query }) {
+  const [isPending, startTransition] = useTransition();
+  const [results, setResults] = useState([]);
+
+  function handleSearch(newQuery) {
+    startTransition(() => {
+      const filtered = heavyFilter(data, newQuery);
+      setResults(filtered);
+    });
+  }
+
+  return isPending ? <Spinner /> : <List data={results} />;
 }
 ```
 
@@ -197,8 +199,7 @@ function handleClick() {
 
 ### 면접 압축 답변
 
-- **10초**: INP는 모든 상호작용 중 가장 느린 응답 시간을 측정하며, Long Task와 메인 스레드 점유가 핵심 원인입니다.
-- **30초**: INP는 FID와 달리 페이지 전체 수명 동안의 모든 상호작용을 보고 가장 느린 쪽을 대표값으로 잡습니다. 긴 JS 작업을 쪼개거나 `startTransition`으로 우선순위를 분리하고, 무거운 계산은 Web Worker로 오프로드하는 것이 효과적입니다.
+**INP**는 FID와 달리 페이지 전체 수명 동안 발생하는 모든 상호작용을 관찰해서, 가장 긴 지연(이상치 일부 제외)을 **75th percentile** 기준으로 측정합니다. 핵심 원인은 **Long Task**(50ms 이상의 긴 JS 작업)와 **메인 스레드 점유**인데, 이를 개선하려면 긴 작업을 `setTimeout`이나 `scheduler.yield()`로 쪼개거나, `startTransition`으로 urgent/non-urgent 업데이트를 분리하고, 무거운 계산은 **Web Worker**로 오프로드하는 것이 효과적입니다.
 
 ---
 
@@ -232,8 +233,7 @@ function handleClick() {
 
 ### 면접 압축 답변
 
-- **10초**: CLS는 예기치 않은 레이아웃 이동의 누적 점수이며, 이미지 크기 명시와 공간 예약이 핵심 해결책입니다.
-- **30초**: CLS는 이미지에 `width`/`height`를 명시하고, 광고 슬롯의 공간을 미리 확보하며, 폰트 로딩 전략을 설정하는 것이 대표적인 개선 방법입니다. 사용자 입력 후 500ms 이내의 이동은 제외되며, skeleton도 실제 콘텐츠와 크기가 일치해야 의미가 있습니다.
+**CLS**는 예기치 않은 레이아웃 이동이 얼마나 누적됐는지를 나타내는 점수입니다. 대표적인 개선 방법은 이미지에 `width`/`height`를 명시해서 공간을 미리 확보하고, 광고나 배너 슬롯에 `min-height`를 설정하며, 웹폰트에 `font-display: swap`이나 `optional`을 적용하는 것입니다. 참고로 사용자 입력 후 500ms 이내의 레이아웃 이동은 CLS에서 제외되고, skeleton UI도 실제 콘텐츠와 크기가 일치해야 의미가 있습니다.
 
 ---
 
@@ -287,8 +287,7 @@ elements.forEach((el, i) => { el.style.height = heights[i] + 10 + "px"; });
 
 ### 면접 압축 답변
 
-- **10초**: 브라우저는 Layout → Paint → Composite 순으로 화면을 그리며, `transform`/`opacity` 애니메이션은 composite만 발생해 reflow를 피합니다.
-- **30초**: Reflow는 기하학적 속성 변경 시 레이아웃을 다시 계산하므로 비용이 크고, `transform`과 `opacity`는 composite 단계에서만 처리되어 reflow를 피합니다. DOM 읽기/쓰기를 번갈아 하면 강제 동기 레이아웃이 발생하므로, 읽기를 먼저 일괄 처리하고 쓰기를 나중에 일괄 처리하는 패턴이 좋습니다.
+브라우저는 **Layout(Reflow) → Paint → Composite** 순으로 화면을 그리는데, 이 중 **Reflow**가 가장 비쌉니다. `width`, `height`, `margin` 같은 기하학적 속성이 바뀌면 하위 요소까지 연쇄적으로 레이아웃을 다시 계산하기 때문입니다. 반면 `transform`과 `opacity`는 **Composite** 단계에서만 처리되어 Reflow를 완전히 건너뛰므로 애니메이션에 적합합니다. 또한 DOM 읽기/쓰기를 번갈아 하면 **강제 동기 레이아웃**이 발생하니, 읽기를 먼저 일괄 처리하고 쓰기를 나중에 일괄 처리하는 패턴을 사용해야 합니다.
 
 ---
 
@@ -338,8 +337,7 @@ async function handleExport() {
 
 ### 면접 압축 답변
 
-- **10초**: 번들 크기는 다운로드뿐 아니라 파싱/실행 비용에 영향을 주며, 코드 스플리팅으로 초기 필요 코드만 먼저 보냅니다.
-- **30초**: 번들 크기는 특히 저사양 모바일에서 파싱/실행 비용이 크고, gzip은 전송만 줄입니다. 번들 분석 도구로 병목을 찾고, 라우트/컴포넌트/기능 단위로 코드 스플리팅하며, 무거운 라이브러리는 가벼운 대안으로 교체하거나 동적 import로 지연 로딩합니다.
+**번들 크기**는 단순히 다운로드 시간뿐 아니라 브라우저의 파싱/실행 비용에도 직접 영향을 줍니다. 특히 저사양 모바일에서는 같은 1MB JS라도 실행에 1초 이상 걸릴 수 있고, **gzip은 전송 크기만 줄이지 실행 크기는 그대로**라는 점을 기억해야 합니다. 실무에서는 번들 분석 도구로 병목을 먼저 찾고, **라우트/컴포넌트/기능 단위로 코드 스플리팅**해서 초기에 필요한 코드만 먼저 보냅니다. 무거운 라이브러리는 가벼운 대안으로 교체하거나 `dynamic import`로 지연 로딩하는 것이 효과적입니다.
 
 ---
 
@@ -388,8 +386,7 @@ async function handleExport() {
 
 ### 면접 압축 답변
 
-- **10초**: 이미지 최적화는 크기/포맷/우선순위/공간 예약을 함께 설계하며, lazy loading은 LCP 이미지를 제외하고 fold 아래에만 적용합니다.
-- **30초**: 이미지는 LCP 후보이자 CLS 원인이므로 `srcset`/`sizes`로 반응형 제공, WebP/AVIF로 포맷 최적화, `width`/`height`로 공간 예약을 합니다. LCP 이미지에는 `fetchpriority="high"`를, fold 아래에만 `loading="lazy"`를 적용합니다. 전체 일괄 lazy는 LCP를 악화시킵니다.
+이미지는 **LCP 후보**이면서 동시에 **CLS 원인**이 될 수 있어서, 크기/포맷/우선순위/공간 예약을 함께 설계해야 합니다. `srcset`/`sizes`로 기기별 반응형 이미지를 제공하고, **WebP/AVIF** 같은 최신 포맷으로 용량을 줄이며, `width`/`height`로 공간을 미리 예약합니다. 핵심 포인트는 LCP 이미지에는 `fetchpriority="high"`를 설정하고, `loading="lazy"`는 **fold 아래 이미지에만** 적용해야 한다는 것입니다. 모든 이미지에 일괄로 lazy를 걸면 오히려 LCP가 악화됩니다.
 
 ---
 
@@ -463,8 +460,7 @@ async function processInChunks(items) {
 
 ### 면접 압축 답변
 
-- **10초**: CSS는 렌더를 차단하고 동기 스크립트는 파싱을 차단합니다. `defer`/Critical CSS로 첫 화면을 앞당기고, Long Task는 Web Worker로 오프로드합니다.
-- **30초**: 렌더 차단 리소스(CSS, 동기 스크립트)와 메인 스레드 Long Task는 각각 첫 화면과 응답성을 악화시킵니다. `defer`는 파싱과 병렬로 다운로드하고 파싱 완료 후 순서대로 실행하며, Critical CSS를 인라인하고 나머지를 비동기 로드합니다. 50ms+ Long Task는 `scheduler.yield()`나 Web Worker로 쪼개야 INP가 개선됩니다.
+**CSS는 렌더를 차단**하고 **동기 스크립트는 HTML 파싱을 차단**해서, 둘 다 첫 화면 표시를 늦추는 주범입니다. 이를 해결하려면 스크립트에 `defer`를 붙여 파싱과 병렬로 다운로드하되 파싱 완료 후 순서대로 실행하게 하고, 첫 화면에 필요한 **Critical CSS만 인라인**한 뒤 나머지는 비동기로 로드합니다. 또한 메인 스레드를 50ms 이상 점유하는 **Long Task**는 INP를 악화시키므로, `scheduler.yield()`로 메인 스레드에 양보하거나 **Web Worker**로 무거운 계산을 오프로드해야 합니다.
 
 ---
 
@@ -516,8 +512,7 @@ useEffect(() => {
 
 ### 면접 압축 답변
 
-- **10초**: 긴 리스트는 virtualization, 뷰포트 감지는 IntersectionObserver, 크기 감지는 ResizeObserver가 scroll/resize 이벤트보다 성능이 좋습니다.
-- **30초**: 수백 개 이상의 리스트는 `react-window` 같은 라이브러리로 보이는 영역만 렌더하고, IntersectionObserver로 무한 스크롤과 lazy loading을, ResizeObserver로 반응형 컴포넌트를 구현합니다. 이 API들은 scroll/resize 이벤트와 달리 강제 reflow를 발생시키지 않아 성능이 좋습니다.
+수백 개 이상의 긴 리스트는 `react-window` 같은 **virtualization** 라이브러리로 화면에 보이는 영역만 DOM에 렌더해야 합니다. 뷰포트 진입 감지는 **IntersectionObserver**로 무한 스크롤과 lazy loading을, 요소 크기 변화 감지는 **ResizeObserver**로 반응형 컴포넌트를 구현합니다. 이 Observer API들은 scroll/resize 이벤트와 달리 초당 수십~수백 회 실행되지 않고 필요할 때만 콜백이 호출되며, `getBoundingClientRect()` 없이도 동작해서 **강제 reflow를 발생시키지 않아** 성능이 훨씬 좋습니다.
 
 ---
 
@@ -560,8 +555,7 @@ async function handleLike() {
 
 ### 면접 압축 답변
 
-- **10초**: 체감 성능은 skeleton, optimistic UI, pending 상태 같은 즉각적 피드백으로 개선하며, 숫자 최적화와 함께 설계해야 합니다.
-- **30초**: 같은 대기 시간이라도 skeleton이나 optimistic update가 있으면 덜 답답합니다. 300ms 이내 응답이면 로딩 표시를 생략하고, 그 이상이면 skeleton이나 pending 상태를 보여주는 게 자연스럽습니다. 숫자(LCP, INP)를 줄이는 것과 피드백(skeleton, optimistic)을 주는 것을 함께 설계해야 진짜 UX가 좋아집니다.
+같은 대기 시간이라도 **skeleton UI**, **optimistic update**, **pending 상태** 같은 즉각적 피드백이 있으면 사용자는 훨씬 덜 답답하게 느낍니다. 실무 팁으로, 300ms 이내에 응답이 오면 로딩 표시를 아예 생략하는 것이 더 자연스럽고, 그 이상이면 skeleton이나 pending 상태를 보여주는 것이 좋습니다. 결국 **숫자 최적화**(LCP, INP 줄이기)와 **UX 피드백**(skeleton, optimistic update)을 함께 설계해야 진짜 체감 성능이 좋아집니다.
 
 ---
 
@@ -601,7 +595,7 @@ async function handleLike() {
 
 ### 2단계: 각 지표의 병목을 추적한다 — LCP, INP, CLS
 
-LCP는 뷰포트에서 가장 큰 콘텐츠의 렌더링 완료 시점이고, **TTFB, 리소스 발견 시점, 다운로드 우선순위, 렌더 차단이 복합 원인**이다. INP는 모든 상호작용 중 가장 느린 응답의 대표값으로, **Long Task와 메인 스레드 점유가 핵심 원인**이다. CLS는 예기치 않은 레이아웃 이동의 누적 점수로, **공간을 미리 예약하는 것**이 해결의 핵심이다.
+LCP는 뷰포트에서 가장 큰 콘텐츠의 렌더링 완료 시점이고, **TTFB, 리소스 발견 시점, 다운로드 우선순위, 렌더 차단이 복합 원인**이다. INP는 가장 긴 상호작용 지연(이상치 일부 제외)을 75th percentile 기준으로 측정하며, **Long Task와 메인 스레드 점유가 핵심 원인**이다. CLS는 예기치 않은 레이아웃 이동의 누적 점수로, **공간을 미리 예약하는 것**이 해결의 핵심이다.
 
 ### 3단계: 화면이 그려지는 경로를 이해한다 — 렌더링 파이프라인
 

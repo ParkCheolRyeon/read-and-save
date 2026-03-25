@@ -10,6 +10,9 @@ import Spinner from "@/components/Spinner";
 import FlashcardDeck from "@/components/FlashcardDeck";
 import Link from "next/link";
 
+type ManifestItem = { id: string; title: string };
+type ChapterNav = { slug: string; title: string };
+
 export default function CardPage() {
   const params = useParams();
   const router = useRouter();
@@ -19,6 +22,8 @@ export default function CardPage() {
   const [title, setTitle] = useState("메모리 카드");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [prevChapter, setPrevChapter] = useState<ChapterNav | null>(null);
+  const [nextChapter, setNextChapter] = useState<ChapterNav | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -26,6 +31,20 @@ export default function CardPage() {
       return;
     }
     if (!slug) return;
+
+    // Load manifest for chapter navigation
+    fetch("/books/manifest.json")
+      .then((r) => r.json())
+      .then((manifest: ManifestItem[]) => {
+        const idx = manifest.findIndex((m) => m.id === slug);
+        if (idx > 0) {
+          setPrevChapter({ slug: manifest[idx - 1].id, title: manifest[idx - 1].title });
+        }
+        if (idx >= 0 && idx < manifest.length - 1) {
+          setNextChapter({ slug: manifest[idx + 1].id, title: manifest[idx + 1].title });
+        }
+      })
+      .catch(() => {});
 
     fetchBookContent(slug)
       .then(async (book) => {
@@ -76,5 +95,12 @@ export default function CardPage() {
     );
   }
 
-  return <FlashcardDeck cards={cards} title={title} />;
+  return (
+    <FlashcardDeck
+      cards={cards}
+      title={title}
+      prevChapter={prevChapter}
+      nextChapter={nextChapter}
+    />
+  );
 }

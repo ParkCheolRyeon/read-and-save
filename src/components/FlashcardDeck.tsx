@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter, type Highlighter } from "shiki";
-import { ArrowLeft, ChevronLeft, ChevronRight, Shuffle } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
@@ -13,9 +13,16 @@ import type { Flashcard } from "@/lib/cards";
 
 /* ── Types ── */
 
+type ChapterNav = {
+  slug: string;
+  title: string;
+};
+
 type FlashcardDeckProps = {
   cards: Flashcard[];
   title: string;
+  prevChapter?: ChapterNav | null;
+  nextChapter?: ChapterNav | null;
 };
 
 /* ── Shiki highlighter singleton ── */
@@ -111,8 +118,15 @@ function CardItem({ card }: { card: Flashcard }) {
         </div>
       ) : (
         /* ── Back (Answer) ── */
-        <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-          <div className="card-answer-scroll flex-1 overflow-y-auto px-4 py-5">
+        <div
+          className="flex flex-col rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
+          style={{ height: "100%", maxHeight: "100%" }}
+        >
+          <div
+            className="card-answer-scroll overflow-y-auto px-4 py-5"
+            style={{ flex: "1 1 0%", minHeight: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="prose prose-zinc max-w-none text-sm leading-7 [word-break:keep-all] prose-headings:font-semibold prose-h2:mt-8 prose-h2:border-b prose-h2:border-zinc-200 prose-h2:pb-2 prose-h2:text-lg prose-h3:mt-6 prose-h3:text-base prose-h4:mt-4 prose-h4:text-sm prose-p:text-zinc-700 prose-strong:text-zinc-900 prose-pre:my-0 prose-pre:bg-transparent prose-pre:p-0 prose-pre:shadow-none prose-pre:ring-0 prose-code:rounded prose-code:bg-[#f3f4fb] prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:text-[#5f6788] prose-code:before:content-none prose-code:after:content-none prose-blockquote:border-l-4 prose-blockquote:border-zinc-300 prose-blockquote:text-zinc-600 prose-li:marker:text-zinc-400 prose-table:block prose-table:overflow-x-auto dark:prose-invert dark:prose-p:text-zinc-200 dark:prose-strong:text-zinc-50 dark:prose-blockquote:border-zinc-600">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -144,9 +158,16 @@ function CardItem({ card }: { card: Flashcard }) {
               </ReactMarkdown>
             </div>
           </div>
-          <p className="shrink-0 py-3 text-center text-xs text-zinc-400 dark:text-zinc-500">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFlipped(false);
+            }}
+            className="shrink-0 py-3 text-center text-xs text-zinc-400 transition hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+          >
             탭하여 질문 보기
-          </p>
+          </button>
         </div>
       )}
     </div>
@@ -155,27 +176,15 @@ function CardItem({ card }: { card: Flashcard }) {
 
 /* ── FlashcardDeck ── */
 
-export default function FlashcardDeck({ cards, title }: FlashcardDeckProps) {
-  const [deck, setDeck] = useState<Flashcard[]>(cards);
+export default function FlashcardDeck({
+  cards,
+  title,
+  prevChapter,
+  nextChapter,
+}: FlashcardDeckProps) {
+  const [deck] = useState<Flashcard[]>(cards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const swiperRef = useRef<SwiperType | null>(null);
-
-  /* ── Shuffle (Fisher-Yates) ── */
-
-  const shuffleDeck = useCallback(() => {
-    setDeck((prev) => {
-      const copy = [...prev];
-      for (let i = copy.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-      }
-      return copy;
-    });
-    setCurrentIndex(0);
-    if (swiperRef.current) {
-      swiperRef.current.slideTo(0);
-    }
-  }, []);
 
   /* ── Keyboard navigation ── */
 
@@ -241,46 +250,49 @@ export default function FlashcardDeck({ cards, title }: FlashcardDeckProps) {
           className="h-full"
         >
           {deck.map((card) => (
-            <SwiperSlide key={card.id} className="!h-auto">
+            <SwiperSlide key={card.id} className="!h-full">
               <CardItem card={card} />
             </SwiperSlide>
           ))}
         </Swiper>
       </div>
 
-      {/* ── Bottom controls ── */}
+      {/* ── Bottom chapter navigation ── */}
       <div
-        className="flex shrink-0 items-center justify-center gap-8 border-t border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-zinc-700 dark:bg-zinc-800/95"
-        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        className="flex shrink-0 items-center justify-between border-t border-zinc-200 bg-white/95 px-4 py-2 backdrop-blur dark:border-zinc-700 dark:bg-zinc-800/95"
+        style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
       >
-        <button
-          type="button"
-          onClick={() => swiperRef.current?.slidePrev()}
-          disabled={currentIndex === 0}
-          className="flex size-11 items-center justify-center rounded-full text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          aria-label="이전 카드"
-        >
-          <ChevronLeft className="size-6" />
-        </button>
+        {prevChapter ? (
+          <Link
+            href={`/cards/${prevChapter.slug}`}
+            className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+          >
+            <ChevronLeft className="size-4" />
+            <span className="max-w-[120px] truncate">{prevChapter.title}</span>
+          </Link>
+        ) : (
+          <div />
+        )}
 
-        <button
-          type="button"
-          onClick={shuffleDeck}
-          className="flex size-11 items-center justify-center rounded-full text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          aria-label="섞기"
+        <Link
+          href="/books"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
         >
-          <Shuffle className="size-5" />
-        </button>
+          <BookOpen className="size-4" />
+          <span>ebook</span>
+        </Link>
 
-        <button
-          type="button"
-          onClick={() => swiperRef.current?.slideNext()}
-          disabled={currentIndex === deck.length - 1}
-          className="flex size-11 items-center justify-center rounded-full text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          aria-label="다음 카드"
-        >
-          <ChevronRight className="size-6" />
-        </button>
+        {nextChapter ? (
+          <Link
+            href={`/cards/${nextChapter.slug}`}
+            className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+          >
+            <span className="max-w-[120px] truncate">{nextChapter.title}</span>
+            <ChevronRight className="size-4" />
+          </Link>
+        ) : (
+          <div />
+        )}
       </div>
     </div>
   );
