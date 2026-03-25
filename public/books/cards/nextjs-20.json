@@ -2,7 +2,7 @@
   {
     "id": 0,
     "question": "1. Next.js를 React 단독 구성보다 선호하는 이유를 설명해보세요.",
-    "answer": "React는 기본적으로 UI 라이브러리이고, Next.js는 그 위에 웹 애플리케이션을 실제로 운영하기 위한 기본 인프라를 얹은 프레임워크입니다. 라우팅, 서버 렌더링, 데이터 페칭, 이미지와 메타데이터 최적화, Route Handlers, 배포 친화적 빌드 구성을 프레임워크 수준에서 제공합니다. 팀 생산성 관점에서 더 중요한 건 기본 구조를 통일한다는 점입니다. 프로젝트마다 라우터, SSR 설정, 이미지 최적화, SEO, API layer를 따로 조립하지 않아도 되니 의사결정 비용이 줄어듭니다. App Router 기준으로 layouts, metadata, route handlers, error/loading 같은 패턴이 파일 규칙으로 강제되어 팀 내 일관성도 만들기 좋습니다. 실무적으로 보면 검색 유입이 중요해서 SEO가 필요하거나, 로그인 대시보드와 공개 콘텐츠가 같이 있거나, BFF나 API layer를 같이 두고 싶을 때 Next.js가 특히 적절합니다."
+    "answer": "React는 기본적으로 UI 라이브러리이고, Next.js는 그 위에 웹 애플리케이션을 실제로 운영하기 위한 기본 인프라를 얹은 프레임워크입니다. 라우팅, 서버 렌더링, 데이터 페칭, 이미지와 메타데이터 최적화, Route Handlers, 배포 친화적 빌드 구성을 프레임워크 수준에서 제공합니다. 팀 생산성 관점에서 더 중요한 건 기본 구조를 통일한다는 점입니다. 프로젝트마다 라우터, SSR(Server-Side Rendering, 서버 사이드 렌더링) 설정, 이미지 최적화, SEO(Search Engine Optimization, 검색 엔진 최적화), API layer를 따로 조립하지 않아도 되니 의사결정 비용이 줄어듭니다. App Router 기준으로 layouts, metadata, route handlers, error/loading 같은 패턴이 파일 규칙으로 강제되어 팀 내 일관성도 만들기 좋습니다. 실무적으로 보면 검색 유입이 중요해서 SEO가 필요하거나, 로그인 대시보드와 공개 콘텐츠가 같이 있거나, BFF(Backend For Frontend, 프론트엔드 전용 백엔드)나 API layer를 같이 두고 싶을 때 Next.js가 특히 적절합니다."
   },
   {
     "id": 1,
@@ -12,12 +12,12 @@
   {
     "id": 2,
     "question": "3. SSR, SSG, ISR, CSR의 차이와 각각의 적절한 사용 사례를 설명해보세요.",
-    "answer": "SSR은 요청마다 서버에서 HTML을 생성하는 방식이고, SSG는 빌드 시점에 HTML을 생성해서 CDN 캐시로 재사용하는 방식입니다. ISR은 정적 생성의 장점을 유지하면서 일정 주기나 on-demand로 정적 결과를 갱신하는 전략이고, CSR은 초기엔 최소 HTML만 내려보내고 실제 렌더를 클라이언트에서 수행하는 방식입니다. 사용 사례를 보면, 로그인별 개인화가 강하고 최신성이 중요하면 SSR, 공개 콘텐츠나 문서처럼 빠른 응답과 CDN 캐시가 중요하면 SSG, 자주 바뀌지만 매 요청 SSR까진 과한 목록이나 카탈로그는 ISR, SEO가 크게 중요하지 않고 인터랙션 중심인 내부 도구는 CSR이 맞습니다. 다만 App Router에서는 이걸 단순 페이지 단위 이분법으로 보기보다, route prerender와 fetch cache, revalidate, client boundary의 조합으로 생각하는 편이 더 정확합니다. 한 라우트 안에서도 정적과 동적을 섞을 수 있습니다."
+    "answer": "SSR(Server-Side Rendering, 서버 사이드 렌더링)은 요청마다 서버에서 HTML을 생성하는 방식이고, SSG(Static Site Generation, 정적 사이트 생성)는 빌드 시점에 HTML을 생성해서 CDN 캐시로 재사용하는 방식입니다. ISR(Incremental Static Regeneration, 증분 정적 재생성)은 정적 생성의 장점을 유지하면서 일정 주기나 on-demand로 정적 결과를 갱신하는 전략이고, CSR(Client-Side Rendering, 클라이언트 사이드 렌더링)은 초기엔 최소 HTML만 내려보내고 실제 렌더를 클라이언트에서 수행하는 방식입니다. 사용 사례를 보면, 로그인별 개인화가 강하고 최신성이 중요하면 SSR, 공개 콘텐츠나 문서처럼 빠른 응답과 CDN 캐시가 중요하면 SSG, 자주 바뀌지만 매 요청 SSR까진 과한 목록이나 카탈로그는 ISR, SEO(Search Engine Optimization, 검색 엔진 최적화)가 크게 중요하지 않고 인터랙션 중심인 내부 도구는 CSR이 맞습니다. 다만 App Router에서는 이걸 단순 페이지 단위 이분법으로 보기보다, route prerender와 fetch cache, revalidate, client boundary의 조합으로 생각하는 편이 더 정확합니다. 한 라우트 안에서도 정적과 동적을 섞을 수 있습니다."
   },
   {
     "id": 3,
     "question": "4. Next.js에서 서버 컴포넌트와 클라이언트 컴포넌트의 차이를 설명해보세요.",
-    "answer": "App Router에서 기본은 Server Component입니다. layout과 page가 기본적으로 Server Component이고, 서버에서 데이터에 가깝게 접근하고, API key 같은 비밀값을 클라이언트에 노출하지 않으며, 클라이언트로 보내는 JavaScript 양을 줄이고, 결과를 캐시하거나 스트리밍할 수 있습니다. Client Component는 state, event handler, useEffect, 브라우저 API, custom hook이 필요할 때 사용합니다. 중요한 건 둘 중 하나만 쓰는 게 아니라 조합해서 쓴다는 점입니다. 실무에서 일반적인 패턴은 페이지의 큰 껍데기와 데이터 fetch는 Server Component에 두고, 버튼, 입력, 애니메이션 같은 상호작용 조각만 Client Component로 내려보내는 것입니다. 서버가 데이터를 fetch해서 client component에 props로 넘기고, client는 상호작용만 담당하는 구조가 가장 효율적입니다."
+    "answer": "App Router에서 기본은 RSC(React Server Components, 리액트 서버 컴포넌트)입니다. layout과 page가 기본적으로 Server Component이고, 서버에서 데이터에 가깝게 접근하고, API key 같은 비밀값을 클라이언트에 노출하지 않으며, 클라이언트로 보내는 JavaScript 양을 줄이고, 결과를 캐시하거나 스트리밍할 수 있습니다. Client Component는 state, event handler, useEffect, 브라우저 API, custom hook이 필요할 때 사용합니다. 중요한 건 둘 중 하나만 쓰는 게 아니라 조합해서 쓴다는 점입니다. 실무에서 일반적인 패턴은 페이지의 큰 껍데기와 데이터 fetch는 Server Component에 두고, 버튼, 입력, 애니메이션 같은 상호작용 조각만 Client Component로 내려보내는 것입니다. 서버가 데이터를 fetch해서 client component에 props로 넘기고, client는 상호작용만 담당하는 구조가 가장 효율적입니다. 참고로 Hydration(하이드레이션)은 서버에서 생성된 정적 HTML에 React가 이벤트와 상태를 연결하는 과정인데, Server Component는 클라이언트에서 hydration이 필요 없기 때문에 JS 번들과 hydration 비용을 모두 줄일 수 있습니다."
   },
   {
     "id": 4,
@@ -27,12 +27,12 @@
   {
     "id": 5,
     "question": "6. getServerSideProps, getStaticProps를 써본 경험이 있다면 각각 언제 썼는지 설명해보세요.",
-    "answer": "Pages Router에서 getStaticProps는 블로그 글, 공개 상품 상세 페이지, CMS 기반 문서처럼 자주 안 바뀌고 SEO가 중요하며 빌드 시점 생성과 CDN 캐시가 유리한 곳에 썼습니다. getServerSideProps는 사용자별 맞춤 대시보드나 요청 시 쿠키나 헤더 기반 분기가 필요하고, 항상 최신성이 중요해서 공개 캐시가 어려운 데이터에 썼습니다. 다만 App Router에서는 이 함수들을 더 이상 쓰지 않습니다. 공식 마이그레이션 가이드 기준으로 fetch와 async Server Components, generateStaticParams 같은 새 API로 대체됩니다. mental model 자체가 바뀐 거라서, 신규 프로젝트라면 fetch의 cache, no-store, revalidate 옵션으로 같은 의도를 표현합니다. 예를 들어 getStaticProps가 하던 역할은 정적 prerender와 revalidate로, getServerSideProps가 하던 역할은 dynamic API 사용이나 cache: 'no-store'로 대응됩니다."
+    "answer": "Pages Router에서 getStaticProps는 블로그 글, 공개 상품 상세 페이지, CMS 기반 문서처럼 자주 안 바뀌고 SEO(Search Engine Optimization, 검색 엔진 최적화)가 중요하며 빌드 시점 생성과 CDN 캐시가 유리한 곳에 썼습니다. getServerSideProps는 사용자별 맞춤 대시보드나 요청 시 쿠키나 헤더 기반 분기가 필요하고, 항상 최신성이 중요해서 공개 캐시가 어려운 데이터에 썼습니다. 다만 App Router에서는 이 함수들을 더 이상 쓰지 않습니다. 공식 마이그레이션 가이드 기준으로 fetch와 async Server Components, generateStaticParams 같은 새 API로 대체됩니다. mental model 자체가 바뀐 거라서, 신규 프로젝트라면 fetch의 cache, no-store, revalidate 옵션으로 같은 의도를 표현합니다. 예를 들어 getStaticProps가 하던 역할은 정적 prerender와 revalidate로, getServerSideProps가 하던 역할은 dynamic API 사용이나 cache: 'no-store'로 대응됩니다."
   },
   {
     "id": 6,
     "question": "7. Next.js에서 SEO를 고려한 페이지 설계를 어떻게 하나요?",
-    "answer": "App Router에서는 Metadata API를 기본 축으로 잡습니다. metadata 객체나 generateMetadata 함수를 사용해서 title, description, OG/Twitter metadata를 route segment별로 정의합니다. 파일 기반 metadata도 중요한데, opengraph-image, twitter-image, robots, sitemap, favicon 같은 special file convention을 쓰면 SEO와 공유 경험을 더 일관되게 설계할 수 있습니다. SEO 설계에서 핵심은 세 가지입니다. 첫째, 초기 HTML에 의미 있는 콘텐츠가 있어야 합니다. 이건 Server Components와 prerendering으로 해결됩니다. 둘째, route별 metadata가 도메인 모델과 함께 움직여야 합니다. generateMetadata가 데이터 기반으로 동적 메타를 생성할 수 있습니다. 셋째, 공유용 OG, robots, sitemap을 따로 챙겨야 합니다. 흥미로운 점은 streaming과 metadata의 관계인데, generateMetadata가 늦게 끝나더라도 초기 UI를 먼저 보낼 수 있고, JS를 실행하는 봇은 나중에 붙는 metadata도 해석할 수 있습니다."
+    "answer": "App Router에서는 Metadata API를 기본 축으로 잡습니다. metadata 객체나 generateMetadata 함수를 사용해서 title, description, OG/Twitter metadata를 route segment별로 정의합니다. 파일 기반 metadata도 중요한데, opengraph-image, twitter-image, robots, sitemap, favicon 같은 special file convention을 쓰면 SEO(Search Engine Optimization, 검색 엔진 최적화)와 공유 경험을 더 일관되게 설계할 수 있습니다. SEO 설계에서 핵심은 세 가지입니다. 첫째, 초기 HTML에 의미 있는 콘텐츠가 있어야 합니다. 이건 Server Components와 prerendering으로 해결됩니다. 둘째, route별 metadata가 도메인 모델과 함께 움직여야 합니다. generateMetadata가 데이터 기반으로 동적 메타를 생성할 수 있습니다. 셋째, 공유용 OG, robots, sitemap을 따로 챙겨야 합니다. 흥미로운 점은 streaming과 metadata의 관계인데, generateMetadata가 늦게 끝나더라도 초기 UI를 먼저 보낼 수 있고, JS를 실행하는 봇은 나중에 붙는 metadata도 해석할 수 있습니다."
   },
   {
     "id": 7,
@@ -57,7 +57,7 @@
   {
     "id": 11,
     "question": "12. BFF 패턴을 Next.js로 구현한다면 어떤 식으로 구성하겠습니까?",
-    "answer": "공식 문서에서도 Next.js가 Backend for Frontend 패턴을 지원한다고 설명하고 있습니다. 저는 app/api 아래에 Route Handlers를 entry point로 두고, 그 안에 data access layer와 service layer를 분리해서 구성하겠습니다. Route Handler에서 외부 API 조합, 인증 토큰 처리, 응답 정규화, 프론트용 DTO shaping을 맡기는 구조입니다. BFF의 핵심은 서버 코드가 있는 것 자체가 아니라, 프론트 요구사항 중심으로 백엔드 응답을 재구성하는 것입니다. auth/session 읽기, upstream API 합성, 캐시/revalidate 정책, 에러 매핑, 프론트가 소비하기 좋은 형태로 반환하는 것이 포인트입니다. 다만 Next.js의 backend capabilities는 full backend replacement가 아니라 API layer입니다. 장기 배치 작업이나 복잡한 비동기 워커, 강한 도메인 트랜잭션이 많은 시스템이라면 BFF는 Next.js에 두되 코어 백엔드는 별도 서비스로 나누는 게 현실적입니다."
+    "answer": "공식 문서에서도 Next.js가 BFF(Backend For Frontend, 프론트엔드 전용 백엔드) 패턴을 지원한다고 설명하고 있습니다. 저는 app/api 아래에 Route Handlers를 entry point로 두고, 그 안에 data access layer와 service layer를 분리해서 구성하겠습니다. Route Handler에서 외부 API 조합, 인증 토큰 처리, 응답 정규화, 프론트용 DTO shaping을 맡기는 구조입니다. BFF의 핵심은 서버 코드가 있는 것 자체가 아니라, 프론트 요구사항 중심으로 백엔드 응답을 재구성하는 것입니다. auth/session 읽기, upstream API 합성, 캐시/revalidate 정책, 에러 매핑, 프론트가 소비하기 좋은 형태로 반환하는 것이 포인트입니다. 다만 Next.js의 backend capabilities는 full backend replacement가 아니라 API layer입니다. 장기 배치 작업이나 복잡한 비동기 워커, 강한 도메인 트랜잭션이 많은 시스템이라면 BFF는 Next.js에 두되 코어 백엔드는 별도 서비스로 나누는 게 현실적입니다."
   },
   {
     "id": 12,
@@ -87,7 +87,7 @@
   {
     "id": 17,
     "question": "18. Next.js에서 캐싱 전략을 어디까지 프레임워크에 맡기고 어디부터 직접 제어하나요?",
-    "answer": "기본적으로는 프레임워크 기본 휴리스틱을 따르고, 데이터 특성상 명확한 요구가 있을 때만 직접 제어합니다. 공식 문서도 대부분의 휴리스틱은 API 사용에 따라 자동 결정되고, 기본값만으로도 괜찮게 동작하도록 설계됐다고 설명합니다. 직접 제어가 필요할 때는 fetch에 cache: 'no-store'나 cache: 'force-cache', next.revalidate, tags 옵션을 쓰고, revalidatePath나 revalidateTag로 무효화하며, use cache나 route segment config도 활용합니다. 중요한 건 캐싱 단위가 하나가 아니라는 점입니다. route shell, fetch Data Cache, tag/path 기반 invalidation, Route Handler caching, Cache Components가 각각 다른 레벨에서 동작합니다. 또 fetch 기본을 무조건 cached라고 단정하면 위험합니다. 동적 API가 사용되면 라우트가 동적으로 전환되면서 fetch 동작이 바뀝니다. 이 미묘한 차이를 이해하고 명시적으로 제어하는 게 안전합니다."
+    "answer": "기본적으로는 프레임워크 기본 휴리스틱을 따르고, 데이터 특성상 명확한 요구가 있을 때만 직접 제어합니다. 공식 문서도 대부분의 휴리스틱은 API 사용에 따라 자동 결정되고, 기본값만으로도 괜찮게 동작하도록 설계됐다고 설명합니다. 직접 제어가 필요할 때는 fetch에 cache: 'no-store'나 cache: 'force-cache', next.revalidate, tags 옵션을 쓰고, revalidatePath나 revalidateTag로 무효화하며, use cache나 route segment config도 활용합니다. 중요한 건 캐싱 단위가 하나가 아니라는 점입니다. route shell, fetch Data Cache, tag/path 기반 invalidation, Route Handler caching, Cache Components가 각각 다른 레벨에서 동작합니다. 또 fetch 기본값에 대해 주의할 점이 있는데, Next.js 15부터 fetch의 기본값이 no-store로 변경되었습니다. 이전 버전에서는 force-cache가 기본이었기 때문에, 버전 업그레이드 시 캐싱 동작이 달라질 수 있습니다. 동적 API가 사용되면 라우트가 동적으로 전환되면서 fetch 동작이 바뀌기도 합니다. 이런 미묘한 차이를 이해하고 명시적으로 제어하는 게 안전합니다."
   },
   {
     "id": 18,
@@ -97,6 +97,6 @@
   {
     "id": 19,
     "question": "20. 네가 했던 프로젝트 중 하나를 골라, 왜 Next.js가 적절한 선택이었는지 설명해보세요.",
-    "answer": "이 질문은 본인 프로젝트로 답하는 게 가장 좋지만, 구조적으로 설명하자면 이렇습니다. 공개 콘텐츠와 로그인 대시보드가 함께 있고, 검색/필터와 이미지 공유가 중요하며, 간단한 BFF가 필요한 서비스라면 Next.js가 매우 적절합니다. 공개 영역은 Metadata API와 prerendering으로 SEO를 챙기고, 대시보드는 Server Components로 데이터를 가져와서 Client Components에서 상호작용을 처리합니다. API가 필요한 부분은 Route Handlers로 붙이고, 데이터 갱신 후에는 revalidation으로 목록을 바로 반영합니다. 핵심은 프레임워크 기능을 제품 요구사항과 일대일로 연결하는 것입니다. 단순히 Next.js가 좋다가 아니라, 검색 유입이 있어서 SSR이 필요했고, 레이아웃 공유가 있어서 nested layouts가 맞았고, 서버와 클라이언트 경계를 프레임워크가 관리해줘서 코드 분리가 편했다는 식으로 구체적 이유를 연결해야 합니다."
+    "answer": "이 질문은 본인 프로젝트로 답하는 게 가장 좋지만, 구조적으로 설명하자면 이렇습니다. 공개 콘텐츠와 로그인 대시보드가 함께 있고, 검색/필터와 이미지 공유가 중요하며, 간단한 BFF(Backend For Frontend, 프론트엔드 전용 백엔드)가 필요한 서비스라면 Next.js가 매우 적절합니다. 공개 영역은 Metadata API와 prerendering으로 SEO(Search Engine Optimization, 검색 엔진 최적화)를 챙기고, 대시보드는 Server Components로 데이터를 가져와서 Client Components에서 상호작용을 처리합니다. API가 필요한 부분은 Route Handlers로 붙이고, 데이터 갱신 후에는 revalidation으로 목록을 바로 반영합니다. 핵심은 프레임워크 기능을 제품 요구사항과 일대일로 연결하는 것입니다. 단순히 Next.js가 좋다가 아니라, 검색 유입이 있어서 SSR이 필요했고, 레이아웃 공유가 있어서 nested layouts가 맞았고, 서버와 클라이언트 경계를 프레임워크가 관리해줘서 코드 분리가 편했다는 식으로 구체적 이유를 연결해야 합니다."
   }
 ]

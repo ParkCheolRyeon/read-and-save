@@ -2,7 +2,7 @@
   {
     "id": 0,
     "question": "1. TypeScript를 사용하는 가장 큰 이유를 말해보세요. 단순한 자동완성 말고 팀 생산성 관점에서 설명해보세요.",
-    "answer": "TypeScript의 가장 큰 가치는 자동완성이 아니라 협업 비용을 줄이는 데 있습니다. 함수, 컴포넌트, API 응답, 도메인 모델의 계약을 타입으로 명시해두면, 다른 개발자가 문서를 따로 읽지 않아도 호출 규칙과 데이터 형태를 코드에서 바로 확인할 수 있습니다. 이 함수가 null을 반환할 수 있는지, 이 prop이 필수인지, 서버 응답에 어떤 필드가 오는지 같은 것들을 문서나 구두로만 관리하면 사람이 바뀌거나 코드가 커질수록 금방 틀어집니다. TypeScript는 이런 암묵적 합의를 코드 표면에 고정시켜줍니다. 리팩터링할 때도 영향 범위를 빠르게 찾을 수 있고, 잘못된 사용을 컴파일 단계에서 막아서 리뷰와 QA 비용이 줄어듭니다. 결국 TypeScript는 문서 대체재라기보다 실행 가능한 계약서 역할을 하는 것이고, 팀 규모가 커질수록 그 효과가 더 뚜렷해집니다."
+    "answer": "TypeScript의 가장 큰 가치는 자동완성이 아니라 협업 비용을 줄이는 데 있습니다. 함수, 컴포넌트, API 응답, 도메인 모델의 계약을 타입으로 명시해두면, 다른 개발자가 문서를 따로 읽지 않아도 호출 규칙과 데이터 형태를 코드에서 바로 확인할 수 있습니다. 이 함수가 null을 반환할 수 있는지, 이 prop이 필수인지, 서버 응답에 어떤 필드가 오는지, DTO(Data Transfer Object, 데이터 전송 객체) 구조가 어떤지 같은 것들을 문서나 구두로만 관리하면 사람이 바뀌거나 코드가 커질수록 금방 틀어집니다. TypeScript는 이런 암묵적 합의를 코드 표면에 고정시켜줍니다. 리팩터링할 때도 영향 범위를 빠르게 찾을 수 있고, 잘못된 사용을 컴파일 단계에서 막아서 리뷰와 QA(Quality Assurance) 비용이 줄어듭니다. 결국 TypeScript는 문서 대체재라기보다 실행 가능한 계약서 역할을 하는 것이고, 팀 규모가 커질수록 그 효과가 더 뚜렷해집니다."
   },
   {
     "id": 1,
@@ -12,7 +12,7 @@
   {
     "id": 2,
     "question": "3. any, unknown, never의 차이를 설명해보세요.",
-    "answer": "이 세 타입은 TypeScript 타입 시스템의 양 끝과 경계를 나타냅니다. any는 타입 검사를 사실상 꺼버리는 타입입니다. 어떤 연산이든 허용되지만 그만큼 타입 시스템의 보호를 완전히 잃습니다. unknown은 무엇이든 들어올 수 있지만 바로 사용할 수는 없는 타입입니다. typeof 체크나 사용자 정의 타입 가드로 narrowing한 뒤에만 안전하게 사용할 수 있습니다. 쉽게 말해서 any는 검사 포기이고 unknown은 아직 모른다는 의미입니다. never는 절대 발생하지 않아야 하는 상태를 나타냅니다. 모든 분기를 다 처리한 뒤 남는 불가능한 경우이거나, 항상 throw하는 함수의 반환 타입에 사용됩니다. switch문에서 exhaustive check를 할 때 default에서 `const _exhaustive: never = value`를 쓰면, 새로운 케이스가 추가됐는데 처리하지 않으면 컴파일 에러가 나서 누락을 방지할 수 있습니다. 실무에서는 외부 입력은 unknown으로 받고, any는 가장 좁은 범위에서만 쓰며, never는 exhaustive check에 활용하는 편입니다."
+    "answer": "이 세 타입은 TypeScript 타입 시스템의 양 끝과 경계를 나타냅니다. any는 타입 검사를 사실상 꺼버리는 타입입니다. 어떤 연산이든 허용되지만 그만큼 타입 시스템의 보호를 완전히 잃습니다. unknown은 무엇이든 들어올 수 있지만 바로 사용할 수는 없는 타입입니다. typeof 체크나 사용자 정의 타입 가드로 narrowing, 즉 타입을 더 구체적으로 좁혀나가는 과정을 거친 뒤에만 안전하게 사용할 수 있습니다. 쉽게 말해서 any는 검사 포기이고 unknown은 아직 모른다는 의미입니다. never는 절대 발생하지 않아야 하는 상태를 나타냅니다. 모든 분기를 다 처리한 뒤 남는 불가능한 경우이거나, 항상 throw하는 함수의 반환 타입에 사용됩니다. switch문에서 exhaustive check를 할 때 default에서 `const _exhaustive: never = value`를 쓰면, 새로운 케이스가 추가됐는데 처리하지 않으면 컴파일 에러가 나서 누락을 방지할 수 있습니다. 실무에서는 외부 입력은 unknown으로 받고, any는 가장 좁은 범위에서만 쓰며, never는 exhaustive check에 활용하는 편입니다."
   },
   {
     "id": 3,
@@ -37,12 +37,12 @@
   {
     "id": 7,
     "question": "8. Partial, Required, Pick, Omit, Record 같은 유틸리티 타입을 언제 어떻게 쓰는지 설명해보세요.",
-    "answer": "유틸리티 타입은 기존 타입을 다시 선언하지 않고 상황에 맞게 변형할 때 사용합니다. Partial<T>는 모든 필드를 optional로 만들어서 수정 폼이나 PATCH 요청 payload에 적합합니다. Required<T>는 반대로 모든 필드를 필수로 만들어서 서버에서 정규화가 완료된 결과를 표현할 때 유용합니다. Pick<T, Keys>는 필요한 필드만 추출하고 Omit<T, Keys>는 특정 필드를 제외해서, 카드 UI용 요약 데이터나 내부에서 숨길 필드를 제거할 때 씁니다. Record<Keys, Value>는 키 유니온을 값 타입으로 매핑하는 사전 형태를 만들 때 사용합니다. 실무에서는 같은 도메인 모델을 생성 요청, 수정 요청, UI 표시용, 캐시 키 구조로 나눌 때 유틸리티 타입을 많이 활용했습니다. 핵심은 새 타입을 계속 복사-붙여넣기하지 않고 원본 타입과의 관계를 유지한 채 파생시키는 것입니다. 다만 유틸리티 타입을 과도하게 중첩하면 원본과 너무 멀어져서 가독성이 떨어질 수 있으니 적절한 균형이 필요합니다."
+    "answer": "유틸리티 타입은 기존 타입을 다시 선언하지 않고 상황에 맞게 변형할 때 사용합니다. Partial<T>는 모든 필드를 optional로 만들어서 수정 폼이나 PATCH 요청 payload에 적합합니다. Required<T>는 반대로 모든 필드를 필수로 만들어서 서버에서 정규화가 완료된 결과를 표현할 때 유용합니다. Pick<T, Keys>는 필요한 필드만 추출하고 Omit<T, Keys>는 특정 필드를 제외해서, 카드 UI용 요약 데이터나 내부에서 숨길 필드를 제거할 때 씁니다. Record<Keys, Value>는 키 유니온을 값 타입으로 매핑하는 사전 형태를 만들 때 사용합니다. 실무에서는 같은 도메인 모델을 생성 요청, 수정 요청, UI 표시용, 캐시 키 구조로 나눌 때 유틸리티 타입을 많이 활용했습니다. 핵심은 새 타입을 계속 복사-붙여넣기하지 않고 원본 타입과의 관계를 유지한 채 파생시키는 것입니다. 참고로 satisfies 연산자를 함께 쓰면 타입을 넓히지 않으면서도 특정 구조를 만족하는지 검증할 수 있어서, 유틸리티 타입으로 만든 구조에 값이 정확히 맞는지 확인할 때 유용합니다. 다만 유틸리티 타입을 과도하게 중첩하면 원본과 너무 멀어져서 가독성이 떨어질 수 있으니 적절한 균형이 필요합니다."
   },
   {
     "id": 8,
     "question": "9. 옵셔널 프로퍼티와 undefined 허용은 어떤 차이가 있나요?",
-    "answer": "얼핏 비슷해 보이지만 객체 shape 관점에서 의미가 다릅니다. `foo?: string`은 프로퍼티 자체가 아예 없을 수도 있다는 뜻이고, `foo: string | undefined`는 프로퍼티는 반드시 존재하지만 값이 undefined일 수 있다는 뜻입니다. 그래서 `type A = { foo?: string }`은 빈 객체 `{}`가 가능하지만, `type B = { foo: string | undefined }`는 `{ foo: undefined }`는 되어도 `{}`는 안 됩니다. 이 차이가 중요한 이유는 상태의 의미가 달라지기 때문입니다. foo가 optional이면 아직 입력되지 않았거나 아예 선택 사항인 필드이고, foo가 undefined를 허용하는 거면 필드는 항상 있지만 아직 값이 비어 있는 상태입니다. 폼 초기값, API payload, 설정 객체에서 미입력과 명시적으로 비움을 구분해야 할 때 이 차이가 실무적으로 중요합니다. 직렬화나 spread, in 체크에서도 동작이 달라질 수 있습니다. TypeScript에는 exactOptionalPropertyTypes 옵션도 있어서, optional 프로퍼티에 undefined를 명시적으로 할당하는 것을 막을 수 있습니다."
+    "answer": "얼핏 비슷해 보이지만 객체 shape 관점에서 의미가 다릅니다. `foo?: string`은 프로퍼티 자체가 아예 없을 수도 있다는 뜻이고, `foo: string | undefined`는 프로퍼티는 반드시 존재하지만 값이 undefined일 수 있다는 뜻입니다. 그래서 `type A = { foo?: string }`은 빈 객체 `{}`가 가능하지만, `type B = { foo: string | undefined }`는 `{ foo: undefined }`는 되어도 `{}`는 안 됩니다. 이 차이가 중요한 이유는 상태의 의미가 달라지기 때문입니다. foo가 optional이면 아직 입력되지 않았거나 아예 선택 사항인 필드이고, foo가 undefined를 허용하는 거면 필드는 항상 있지만 아직 값이 비어 있는 상태입니다. 폼 초기값, API payload, 설정 객체에서 미입력과 명시적으로 비움을 구분해야 할 때 이 차이가 실무적으로 중요합니다. 직렬화나 spread, in 체크에서도 동작이 달라질 수 있습니다. TypeScript의 `exactOptionalPropertyTypes` 옵션을 켜면 optional 프로퍼티에 undefined를 명시적으로 할당하는 것을 막아서, 프로퍼티가 없는 상태와 값이 undefined인 상태를 더 엄격하게 구분할 수 있습니다. `noUncheckedIndexedAccess` 옵션과 함께 쓰면 인덱스 접근 시에도 undefined 가능성을 강제로 체크하게 되어 런타임 안전성이 한층 올라갑니다."
   },
   {
     "id": 9,
@@ -52,12 +52,12 @@
   {
     "id": 10,
     "question": "11. 좁혀지기(narrowing)가 어떻게 이뤄지는지 설명해보세요.",
-    "answer": "TypeScript의 narrowing은 런타임 제어 흐름을 분석해서 타입을 더 구체적으로 추론하는 과정입니다. typeof, instanceof, in, equality check, truthiness check, early return 같은 코드 구조를 보고 control flow analysis를 통해 타입을 줄여갑니다. 예를 들어 `function print(value: string | number)` 안에서 `if (typeof value === 'string')` 블록에서는 value가 string으로 좁혀지고, return 이후에는 number로 좁혀집니다. 중요한 건 narrowing이 단순히 typeof만이 아니라 코드의 도달 가능성(reachability)까지 분석한다는 점입니다. if문에서 return이 있으면 아래 코드에는 해당 타입이 제거된 상태로 추론됩니다. 이 메커니즘을 잘 이해하면 유니온 타입이나 unknown을 안전하게 다룰 수 있고, as로 강제 assertion하는 것을 줄일 수 있습니다. 실무에서는 narrowing을 잘 설계하는 게 타입 안전한 코드를 작성하는 가장 자연스러운 방법이라고 생각합니다. 사용자 정의 타입 가드를 만들어서 복잡한 narrowing 로직을 재사용 가능한 함수로 분리하는 것도 좋은 패턴입니다."
+    "answer": "TypeScript의 narrowing(좁혀지기)은 런타임 제어 흐름을 분석해서 타입을 더 구체적으로 추론하는 과정입니다. 쉽게 말해 넓은 타입에서 시작해서 조건문을 통과할 때마다 가능한 타입 범위가 줄어드는 것입니다. typeof, instanceof, in, equality check, truthiness check, early return 같은 코드 구조를 보고 CFA(Control Flow Analysis, 제어 흐름 분석)를 통해 타입을 줄여갑니다. 예를 들어 `function print(value: string | number)` 안에서 `if (typeof value === 'string')` 블록에서는 value가 string으로 좁혀지고, return 이후에는 number로 좁혀집니다. 중요한 건 narrowing이 단순히 typeof만이 아니라 코드의 도달 가능성(reachability)까지 분석한다는 점입니다. if문에서 return이 있으면 아래 코드에는 해당 타입이 제거된 상태로 추론됩니다. 이 메커니즘을 잘 이해하면 유니온 타입이나 unknown을 안전하게 다룰 수 있고, as로 강제 assertion하는 것을 줄일 수 있습니다. 실무에서는 narrowing을 잘 설계하는 게 타입 안전한 코드를 작성하는 가장 자연스러운 방법이라고 생각합니다. 사용자 정의 타입 가드를 만들어서 복잡한 narrowing 로직을 재사용 가능한 함수로 분리하는 것도 좋은 패턴입니다."
   },
   {
     "id": 11,
     "question": "12. as const는 왜 필요하고, 어디서 유용한가요?",
-    "answer": "as const는 리터럴 값을 가능한 한 가장 구체적인 타입으로 고정하고 readonly로 다루게 해주는 문법입니다. as const가 없으면 `const arr = ['idle', 'loading']`은 `string[]`으로 넓혀지지만, `as const`를 붙이면 `readonly ['idle', 'loading']`이 되어 각 요소가 리터럴 타입으로 유지됩니다. 이 특성 덕분에 값 정의를 타입의 출발점으로 바꿀 수 있습니다. 대표적으로 상수 배열에서 `(typeof STATUS)[number]`로 유니온 타입을 뽑거나, 상수 객체에서 keyof typeof로 key union을 뽑는 패턴이 있습니다. 실무에서는 variant 목록, route name 상수, action type 상수, 권한 코드, select 옵션의 value 집합 같은 곳에서 많이 사용합니다. 이런 패턴을 활용하면 enum 대신 const object + as const + union literal 조합으로 enum-like pattern을 만들 수 있어서, 값과 타입을 한 곳에서 관리하면서도 JavaScript 친화적인 코드를 유지할 수 있습니다."
+    "answer": "as const는 리터럴 값을 가능한 한 가장 구체적인 타입으로 고정하고 readonly로 다루게 해주는 문법입니다. as const가 없으면 `const arr = ['idle', 'loading']`은 `string[]`으로 넓혀지지만, `as const`를 붙이면 `readonly ['idle', 'loading']`이 되어 각 요소가 리터럴 타입으로 유지됩니다. 이 특성 덕분에 값 정의를 타입의 출발점으로 바꿀 수 있습니다. 대표적으로 상수 배열에서 `(typeof STATUS)[number]`로 유니온 타입을 뽑거나, 상수 객체에서 keyof typeof로 key union을 뽑는 패턴이 있습니다. 여기에 satisfies 연산자를 함께 쓰면 as const로 좁힌 타입을 유지하면서도 특정 구조를 만족하는지 검증할 수 있습니다. 예를 들어 `const STATUS = { ... } as const satisfies Record<string, string>`처럼 쓰면 값은 리터럴로 유지되면서 구조도 보장됩니다. 실무에서는 variant 목록, route name 상수, action type 상수, 권한 코드, select 옵션의 value 집합 같은 곳에서 많이 사용합니다. 이런 패턴을 활용하면 enum 대신 const object + as const + union literal 조합으로 enum-like pattern을 만들 수 있어서, 값과 타입을 한 곳에서 관리하면서도 JavaScript 친화적인 코드를 유지할 수 있습니다."
   },
   {
     "id": 12,
@@ -67,7 +67,7 @@
   {
     "id": 13,
     "question": "14. Zod 같은 런타임 스키마 검증 도구가 TypeScript만으로 해결되지 않는 어떤 문제를 해결해주나요?",
-    "answer": "TypeScript는 컴파일타임 타입 시스템이라서 코드를 작성하는 시점에서의 안전성만 보장하고, 실제 런타임에 들어오는 값이 타입과 맞는지는 확인하지 못합니다. 타입 정보는 빌드할 때 전부 사라지기 때문입니다. 예를 들어 `const data = await response.json() as User`라고 쓰면 컴파일은 되지만, 서버가 `{ id: 123 }`을 보내도 아무 경고 없이 통과됩니다. Zod 같은 도구는 이 간극을 메워줍니다. 스키마를 정의하고 parse를 호출하면 실제 값이 규칙에 맞는지 런타임에서 검사하고, 맞지 않으면 에러를 던집니다. 네트워크 응답, 폼 입력, localStorage, querystring처럼 외부에서 들어오는 값은 항상 신뢰할 수 없기 때문에 이런 경계 구간에서 검증이 필요합니다. TypeScript가 이렇게 사용하라는 계약을 설명한다면, Zod는 실제로 지금 들어온 값이 그 계약을 만족하는지 확인하는 것입니다. 둘은 대체 관계가 아니라 보완 관계입니다."
+    "answer": "TypeScript는 컴파일타임 타입 시스템이라서 코드를 작성하는 시점에서의 안전성만 보장하고, 실제 런타임에 들어오는 값이 타입과 맞는지는 확인하지 못합니다. 타입 정보는 빌드할 때 전부 사라지는데, 이를 타입 소거(type erasure)라고 합니다. 예를 들어 `const data = await response.json() as User`라고 쓰면 컴파일은 되지만, 서버가 `{ id: 123 }`을 보내도 아무 경고 없이 통과됩니다. Zod 같은 도구는 이 간극을 메워줍니다. 스키마를 정의하고 parse를 호출하면 실제 값이 규칙에 맞는지 런타임에서 검사하고, 맞지 않으면 에러를 던집니다. 네트워크 응답, 폼 입력, localStorage, querystring처럼 외부에서 들어오는 값은 항상 신뢰할 수 없기 때문에 이런 경계 구간에서 검증이 필요합니다. TypeScript가 이렇게 사용하라는 계약을 설명한다면, Zod는 실제로 지금 들어온 값이 그 계약을 만족하는지 확인하는 것입니다. 둘은 대체 관계가 아니라 보완 관계입니다."
   },
   {
     "id": 14,
@@ -92,7 +92,7 @@
   {
     "id": 18,
     "question": "19. 모노레포 환경에서 타입 공유를 할 때 어떤 문제를 겪을 수 있고 어떻게 관리하나요?",
-    "answer": "모노레포에서 타입 공유는 편리하지만 여러 문제가 생길 수 있습니다. 패키지 간 순환 의존이 생기거나, 빌드 순서가 꼬이거나, path alias와 실제 해석 경로가 불일치하거나, 타입만 공유하려다 런타임 코드까지 얽히는 경우가 자주 있습니다. 프로젝트가 커지면 타입 체크와 에디터 반응 속도가 느려지는 것도 큰 문제입니다. 에디터가 전체 프로젝트의 타입 그래프를 로드하면서 무거워질 수 있습니다. 관리 방법으로는 먼저 공용 타입 패키지를 명확히 분리하고, 도메인별로 public export만 노출합니다. 앱 전용 타입과 공통 계약 타입을 분리해서 아무 타입이나 다 공유하는 것을 피합니다. TypeScript의 project references와 composite, incremental 설정으로 빌드 단위를 관리하면 전체 레포를 재빌드하는 비용을 줄일 수 있습니다. disableReferencedProjectLoad 같은 옵션으로 에디터 성능도 개선할 수 있습니다. 경험상 경계를 나눠서 계약 타입만 공유하는 쪽이 유지보수에 훨씬 유리했습니다."
+    "answer": "모노레포에서 타입 공유는 편리하지만 여러 문제가 생길 수 있습니다. 패키지 간 순환 의존이 생기거나, 빌드 순서가 꼬이거나, path alias와 실제 해석 경로가 불일치하거나, 타입만 공유하려다 런타임 코드까지 얽히는 경우가 자주 있습니다. 프로젝트가 커지면 타입 체크와 에디터 반응 속도가 느려지는 것도 큰 문제입니다. 에디터가 전체 프로젝트의 타입 그래프를 로드하면서 무거워질 수 있습니다. 관리 방법으로는 먼저 공용 타입 패키지를 명확히 분리하고, 도메인별로 public export만 노출합니다. 앱 전용 타입과 공통 계약 타입, 특히 DTO(Data Transfer Object, 데이터 전송 객체) 같은 경계 타입을 분리해서 아무 타입이나 다 공유하는 것을 피합니다. TypeScript의 project references와 composite, incremental 설정으로 빌드 단위를 관리하면 전체 레포를 재빌드하는 비용을 줄일 수 있습니다. disableReferencedProjectLoad 같은 옵션으로 에디터 성능도 개선할 수 있습니다. 경험상 경계를 나눠서 계약 타입만 공유하는 쪽이 유지보수에 훨씬 유리했습니다."
   },
   {
     "id": 19,
