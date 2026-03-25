@@ -38,7 +38,7 @@ Part C. SEO 기초
 Part D. React 19 신규 기능
   → use() 훅
   → useOptimistic
-  → useFormStatus / useFormState
+  → useFormStatus / useActionState
   → ref as prop (forwardRef 불필요)
   → React 19 전체 정리
 ```
@@ -63,6 +63,33 @@ Part D. React 19 신규 기능
 | **줄 바꿈** | `flex-wrap`으로 가능하지만 행 간 제어 약함 | 행과 열을 명시적으로 정의 |
 | **갭** | `gap` 지원 | `gap` 지원 |
 | **정렬** | `justify-content`, `align-items` | `justify-items`, `align-items`, `place-items` |
+
+### Flexbox vs Grid — 시각적 차이
+
+```
+Flexbox (1차원 — 한 방향으로 배치):
+┌────┐ ┌────┐ ┌────┐ ┌────┐
+│ A  │ │ B  │ │ C  │ │ D  │  ← 가로 한 줄 (row)
+└────┘ └────┘ └────┘ └────┘
+      또는
+┌────┐
+│ A  │
+├────┤
+│ B  │  ← 세로 한 줄 (column)
+├────┤
+│ C  │
+└────┘
+
+Grid (2차원 — 행과 열 동시 제어):
+┌──────────┬────────┬────────┐
+│  Header  │ Header │ Header │  ← 행 1
+├──────────┼────────┼────────┤
+│  Sidebar │  Main  │  Main  │  ← 행 2
+├──────────┼────────┼────────┤
+│  Footer  │ Footer │ Footer │  ← 행 3
+└──────────┴────────┴────────┘
+  열 1       열 2     열 3
+```
 
 ### Flexbox 기본
 
@@ -355,7 +382,7 @@ div.text { color: green; }      /* 0,0,1,1 — .text보다 높음 */
 
 ## 3. XSS — 공격 원리와 방어
 
-> **핵심 요약** — XSS(Cross-Site Scripting)는 공격자가 웹 페이지에 악성 스크립트를 주입해 다른 사용자의 브라우저에서 실행시키는 공격이다. React의 JSX는 기본적으로 이스케이프하지만, `dangerouslySetInnerHTML`이나 `href`에 사용자 입력을 넣으면 취약해진다.
+> **핵심 요약** — **XSS(Cross-Site Scripting, 교차 사이트 스크립팅)**는 공격자가 웹 페이지에 악성 스크립트를 주입해 다른 사용자의 브라우저에서 실행시키는 공격이다. React의 JSX는 기본적으로 이스케이프하지만, `dangerouslySetInnerHTML`이나 `href`에 사용자 입력을 넣으면 취약해진다.
 
 ### XSS 종류
 
@@ -397,6 +424,27 @@ function UserLink({ url }) {
 // 위험 3: eval, Function, innerHTML
 eval(userInput);                          // 절대 금지
 document.getElementById("x").innerHTML = userInput; // 위험
+```
+
+### Stored XSS 공격 흐름
+
+```
+1. 공격자                    2. 서버                 3. 피해자
+┌──────────┐               ┌──────────┐           ┌──────────┐
+│ 악성 스크립트│──저장 요청──→│  DB에 저장 │           │          │
+│ 입력       │               │ <script>  │           │          │
+└──────────┘               │ alert()   │           │          │
+                           └────┬─────┘           │          │
+                                │                  │          │
+                           페이지 요청 ←────────────┤ 페이지   │
+                                │                  │ 방문     │
+                           감염된 HTML ─────────→  │          │
+                                                   │ 스크립트 │
+                                                   │ 실행!    │
+                                                   │ 쿠키 탈취│
+                                                   └──────────┘
+
+방어: 출력 시 이스케이프 + CSP 헤더 + DOMPurify로 sanitize
 ```
 
 ### 방어 전략
@@ -453,7 +501,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.examp
 
 ## 4. CSRF — 공격 원리와 방어
 
-> **핵심 요약** — CSRF(Cross-Site Request Forgery)는 인증된 사용자의 브라우저를 이용해 의도하지 않은 요청을 보내는 공격이다. 쿠키가 자동 전송되는 특성을 악용한다. `SameSite` 쿠키 + CSRF 토큰 + Origin 검증으로 방어.
+> **핵심 요약** — **CSRF(Cross-Site Request Forgery, 교차 사이트 요청 위조)**는 인증된 사용자의 브라우저를 이용해 의도하지 않은 요청을 보내는 공격이다. 쿠키가 자동 전송되는 특성을 악용한다. `SameSite` 쿠키 + CSRF 토큰 + Origin 검증으로 방어.
 
 ### 공격 원리
 
@@ -473,6 +521,26 @@ Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.examp
   <input name="amount" value="1000000" />
 </form>
 <script>document.forms[0].submit();</script>
+```
+
+### CSRF 공격 흐름
+
+```
+사용자          evil.com          브라우저           bank.com
+  │                                │                  │
+  │── bank.com 로그인 ────────────→│── 인증 ─────────→│
+  │                                │← 세션 쿠키 ──────│
+  │                                │                  │
+  │── evil.com 방문 ──────────────→│                  │
+  │                                │                  │
+  │   (숨겨진 폼이 자동 제출)      │                  │
+  │                                │── POST /transfer─→│
+  │                                │   Cookie: 자동 첨부│
+  │                                │                  │
+  │                                │                  │── 송금 실행!
+  │                                │                  │   (사용자 의도 아님)
+
+방어: CSRF 토큰 + SameSite=Lax 쿠키 + Origin 헤더 검증
 ```
 
 ### 왜 쿠키 자동 전송이 문제인가
@@ -549,7 +617,7 @@ async function transfer(data) {
 
 ## 5. SEO — meta 태그, Open Graph, Next.js Metadata API
 
-> **핵심 요약** — SEO는 검색 엔진이 페이지를 이해하고 노출하는 데 필요한 기술적 기반이다. `<title>`, `<meta description>`, Open Graph, 구조화 데이터, sitemap, robots.txt가 핵심. Next.js는 Metadata API로 이를 선언적으로 관리한다.
+> **핵심 요약** — **SEO(Search Engine Optimization, 검색 엔진 최적화)**는 검색 엔진이 페이지를 이해하고 노출하는 데 필요한 기술적 기반이다. `<title>`, `<meta description>`, Open Graph, 구조화 데이터, sitemap, robots.txt가 핵심. Next.js는 Metadata API로 이를 선언적으로 관리한다.
 
 ### 핵심 meta 태그
 
@@ -810,6 +878,42 @@ function ContactForm({ submitAction }) {
 ```
 
 `useFormStatus`는 가장 가까운 부모 `<form>`의 제출 상태를 읽는다. 이전에는 `isSubmitting` 상태를 직접 관리해야 했다.
+
+### useActionState — 폼 액션의 상태 관리
+
+`useActionState`(React 19에서 `useFormState`가 개명된 API)는 Server Action의 실행 상태와 반환값을 관리한다.
+
+```tsx
+import { useActionState } from "react";
+
+async function submitForm(prevState: any, formData: FormData) {
+  const result = await saveToServer(formData);
+  if (!result.ok) return { error: result.message };
+  return { success: true };
+}
+
+function MyForm() {
+  const [state, formAction, isPending] = useActionState(submitForm, null);
+
+  return (
+    <form action={formAction}>
+      <input name="email" />
+      <button disabled={isPending}>
+        {isPending ? "제출 중..." : "제출"}
+      </button>
+      {state?.error && <p>{state.error}</p>}
+    </form>
+  );
+}
+```
+
+**useFormStatus vs useActionState:**
+
+| 구분 | useFormStatus | useActionState |
+|---|---|---|
+| 위치 | form 자식 컴포넌트 안에서 사용 | form을 감싸는 컴포넌트에서 사용 |
+| 반환값 | `{ pending, data, method, action }` | `[state, formAction, isPending]` |
+| 용도 | 제출 버튼 비활성화 등 UI 상태 | 액션 결과(성공/에러)와 로딩 상태 관리 |
 
 ### ref as prop — forwardRef 불필요
 

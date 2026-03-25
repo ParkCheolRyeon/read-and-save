@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, memo } from "react";
+import { useEffect, useRef, useState, useMemo, memo } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -90,6 +90,93 @@ const ShikiCodeBlock = memo(function ShikiCodeBlock({
   );
 });
 
+/* ── MDX preprocessing ── */
+
+function parseSourceMapEntries(content: string): string {
+  const entries: {
+    modulePath: string;
+    symbols: string[];
+    whyItMatters: string;
+    readHint: string;
+  }[] = [];
+
+  const entryRegex =
+    /modulePath:\s*"([^"]+)"[\s\S]*?symbols:\s*\[([^\]]*)\][\s\S]*?whyItMatters:\s*"([^"]*)"[\s\S]*?readHint:\s*"([^"]*)"/g;
+
+  let m;
+  while ((m = entryRegex.exec(content)) !== null) {
+    const symbols = [...m[2].matchAll(/"([^"]+)"/g)].map((s) => s[1]);
+    entries.push({
+      modulePath: m[1],
+      symbols,
+      whyItMatters: m[3],
+      readHint: m[4],
+    });
+  }
+
+  if (entries.length === 0) return "";
+
+  let result = "\n#### 📂 Source Map\n\n";
+  for (const entry of entries) {
+    result += `**\`${entry.modulePath}\`**\n`;
+    result += `- 주요 심볼: ${entry.symbols.map((s) => `\`${s}\``).join(", ")}\n`;
+    result += `- 중요한 이유: ${entry.whyItMatters}\n`;
+    result += `- 읽기 힌트: ${entry.readHint}\n\n`;
+  }
+
+  return result;
+}
+
+function preprocessMdx(body: string): string {
+  let result = body;
+
+  // Remove JSX expression spacers: {" "}
+  result = result.replace(/\{"\s*"\}/g, " ");
+
+  // InlineAnnotation → bold term inline + blockquote note below
+  result = result.replace(
+    /<InlineAnnotation\s+term="([^"]+)">\s*([\s\S]*?)\s*<\/InlineAnnotation>\n?([^\n<]*)/g,
+    (_: string, term: string, desc: string, after: string) => {
+      const cleanDesc = desc.replace(/\s+/g, " ").trim();
+      const afterText = after.trim();
+      return `**${term}**${afterText ? " " + afterText : ""}\n\n> 📌 **${term}**: ${cleanDesc}\n`;
+    },
+  );
+
+  // BlockingVsYieldingTimeline → comparison table
+  result = result.replace(
+    /<BlockingVsYieldingTimeline\s+frameBudgetMs=\{([\d.]+)\}\s+stackTaskMs=\{([\d.]+)\}\s+fiberSliceMs=\{([\d.]+)\}\s*\/>/g,
+    (_: string, frameBudget: string, stackTask: string, fiberSlice: string) => {
+      const slices = Math.ceil(Number(stackTask) / Number(fiberSlice));
+      return [
+        "",
+        `| 모델 | 작업 시간 | Frame Budget (${frameBudget}ms) 기준 |`,
+        "| --- | --- | --- |",
+        `| ⬛ Stack (연속 점유) | ${stackTask}ms 연속 실행 | 초과 ❌ |`,
+        `| 🟩 Fiber (slice 분할) | ${fiberSlice}ms × ${slices}회 | slice당 여유 ✅ |`,
+        "",
+      ].join("\n");
+    },
+  );
+
+  // SourceMapTable → formatted list
+  result = result.replace(
+    /<SourceMapTable\s+entries=\{\[([\s\S]*?)\]\}\s*\/>/g,
+    (_: string, content: string) => parseSourceMapEntries(content),
+  );
+
+  // rf-callout div → blockquote
+  result = result.replace(
+    /<div\s+className="rf-callout">\s*<strong>([\s\S]*?)<\/strong>\s*<p\s+className="rf-small">\s*([\s\S]*?)\s*<\/p>\s*<\/div>/g,
+    (_: string, heading: string, content: string) => {
+      const cleanContent = content.replace(/\s+/g, " ").trim();
+      return `\n> **${heading.trim()}**\n> ${cleanContent}\n`;
+    },
+  );
+
+  return result;
+}
+
 /* ── Reader ── */
 
 export default function Reader({ slug }: ReaderProps) {
@@ -120,6 +207,11 @@ export default function Reader({ slug }: ReaderProps) {
       .finally(() => setLoading(false));
   }, [slug, router]);
 
+  const processedBody = useMemo(
+    () => (book ? preprocessMdx(book.body) : ""),
+    [book],
+  );
+
   if (loading) {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-zinc-100 dark:bg-zinc-900">
@@ -147,7 +239,7 @@ export default function Reader({ slug }: ReaderProps) {
     );
   }
 
-  const { meta, body } = book;
+  const { meta } = book;
 
   const currentIndex = manifest.findIndex((entry) => entry.id === slug);
   const prevChapter = currentIndex > 0 ? manifest[currentIndex - 1] : null;
@@ -254,7 +346,7 @@ export default function Reader({ slug }: ReaderProps) {
                 },
               }}
             >
-              {body}
+              {processedBody}
             </ReactMarkdown>
           </div>
 

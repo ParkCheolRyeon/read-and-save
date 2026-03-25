@@ -21,7 +21,7 @@ learningGoals:
 ```
 측정부터 시작한다 (무엇이 느린가?)
   → Core Web Vitals (LCP / INP / CLS)
-    → 필드 데이터 + 실험실 데이터 (RUM + Lighthouse)
+    → 필드 데이터 + 실험실 데이터 (**RUM(Real User Monitoring, 실제 사용자 모니터링 — 실제 방문자 브라우저에서 수집하는 성능 데이터)** + Lighthouse)
       → 브라우저 렌더링 파이프라인 (DOM → Layout → Paint → Composite)
         → 번들 크기 + 코드 스플리팅 (JS 최적화)
           → 이미지 최적화 + Lazy Loading (리소스 최적화)
@@ -32,7 +32,7 @@ learningGoals:
 
 ---
 
-## 99. 측정부터 시작한다 — Core Web Vitals
+## 67. 측정부터 시작한다 — Core Web Vitals
 
 > **핵심 요약** — 성능 최적화는 해결책부터가 아니라 측정부터. Core Web Vitals는 LCP(로딩), INP(반응성), CLS(안정성)로 "느리다"를 구체 지표로 분해한다. 필드 데이터와 실험실 데이터를 함께 봐야 한다.
 
@@ -51,6 +51,28 @@ learningGoals:
 | **LCP** | 주요 콘텐츠 표시 속도 | 2.5초 이하 | "페이지가 안 떠요" |
 | **INP** | 상호작용 반응성 | 200ms 이하 | "눌렀는데 반응이 없어요" |
 | **CLS** | 시각적 안정성 | 0.1 이하 | "버튼이 밀려서 다른 거 눌렀어요" |
+
+### Core Web Vitals — 페이지 로드 타임라인
+
+```
+페이지 로드 시간 →
+│
+│  [요청]─[TTFB]─[첫 번째 바이트]─[HTML 파싱]─[리소스 로딩]─[렌더링]
+│                                                │
+│         ┌── LCP (Largest Contentful Paint) ────┘
+│         │   "주요 콘텐츠가 보이는 시점" (2.5초 이내 = 좋음)
+│         │
+│  ──────────── 페이지 사용 중 ─────────────────────────→
+│         │         │              │
+│         │    ┌── INP ──┐    ┌── INP ──┐
+│         │    │클릭/입력 │    │클릭/입력 │
+│         │    │→ 반응    │    │→ 반응    │
+│         │    └─────────┘    └─────────┘
+│         │    "상호작용 반응성" (200ms 이내 = 좋음)
+│         │
+│    ─── CLS 누적 ──────────────────────────────→
+│         레이아웃이 갑자기 밀리는 정도 (0.1 이내 = 좋음)
+```
 
 ### 필드 데이터 vs 실험실 데이터
 
@@ -87,7 +109,7 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 
 ---
 
-## 100. LCP — 주요 콘텐츠 표시 속도
+## 68. LCP — 주요 콘텐츠 표시 속도
 
 > **핵심 요약** — LCP는 뷰포트에서 가장 큰 콘텐츠가 렌더링 완료되는 시점. 서버 응답(TTFB), 리소스 발견 시점, 다운로드 우선순위, 렌더 차단이 복합 원인. LCP 이미지에 lazy loading을 걸면 오히려 악화.
 
@@ -126,9 +148,9 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 
 ---
 
-## 101. INP — 상호작용 반응성
+## 69. INP — 상호작용 반응성
 
-> **핵심 요약** — INP는 모든 상호작용 중 가장 느린 응답 시간의 대표값(~p98). FID가 첫 입력만 봤다면 INP는 전체를 본다. Long Task(50ms+)와 메인 스레드 점유가 핵심 원인.
+> **핵심 요약** — INP는 페이지 방문 동안 관측된 모든 상호작용 중 가장 긴 지연 시간을 측정한다(50개 이상일 때 상위 이상치 일부 제외). CWV(Core Web Vitals) 평가 시에는 방문자들의 75번째 백분위수(75th percentile) 기준으로 '좋음/개선 필요/나쁨'을 판정한다. FID가 첫 입력만 봤다면 INP는 전체를 본다. Long Task(50ms+)와 메인 스레드 점유가 핵심 원인.
 
 ### FID vs INP
 
@@ -142,7 +164,13 @@ onCLS((metric) => sendToAnalytics({ name: "CLS", value: metric.value }));
 | 원인 | 개선 |
 |---|---|
 | 긴 JS 작업 (Long Task) | `setTimeout`/`scheduler.yield()`로 쪼개기 |
+
+> 50ms가 기준인 이유: 60fps 기준 한 프레임이 약 16ms이고, 사용자 입력 처리까지 고려하면 50ms가 '버벅임'을 느끼는 임계점이다.
+
 | 무거운 렌더 계산 | `startTransition`으로 urgent/non-urgent 분리 |
+
+> startTransition은 React 18이 도입한 '급한 업데이트(사용자 입력)와 덜 급한 업데이트(화면 전환)를 분리'하는 메커니즘이다.
+
 | 큰 리스트 재계산 | virtualization, 상태 범위 축소 |
 | 무거운 JSON 파싱 | Web Worker로 오프로드 |
 
@@ -174,7 +202,7 @@ function handleClick() {
 
 ---
 
-## 102. CLS — 시각적 안정성
+## 70. CLS — 시각적 안정성
 
 > **핵심 요약** — CLS는 예기치 않은 레이아웃 이동의 누적 점수. 이미지 크기 미지정, 동적 콘텐츠 삽입, 폰트 교체가 주요 원인. 공간을 미리 예약하는 것이 핵심.
 
@@ -209,7 +237,7 @@ function handleClick() {
 
 ---
 
-## 103. 브라우저 렌더링 파이프라인 — Reflow, Repaint, Composite
+## 71. 브라우저 렌더링 파이프라인 — Reflow, Repaint, Composite
 
 > **핵심 요약** — 브라우저는 DOM → CSSOM → 렌더 트리 → Layout(Reflow) → Paint → Composite 순으로 화면을 그린다. Reflow는 비싸고, `transform`/`opacity` 애니메이션은 Composite만 발생해서 저렴하다.
 
@@ -217,7 +245,7 @@ function handleClick() {
 
 ```
 HTML → DOM 트리
-CSS → CSSOM 트리
+CSS → **CSSOM(CSS Object Model, CSS 객체 모델 — 브라우저가 CSS를 파싱하여 만드는 트리 구조)** 트리
 DOM + CSSOM → 렌더 트리
   → Layout (Reflow): 위치/크기 계산 — 비쌈!
     → Paint: 픽셀 채우기
@@ -264,13 +292,15 @@ elements.forEach((el, i) => { el.style.height = heights[i] + 10 + "px"; });
 
 ---
 
-## 104. 번들 크기와 코드 스플리팅
+## 72. 번들 크기와 코드 스플리팅
 
 > **핵심 요약** — 번들 크기는 다운로드뿐 아니라 파싱/컴파일/실행 비용에 영향. 저사양 기기에서 체감 차이가 크다. 코드 스플리팅으로 초기 필요 코드만 먼저 보내고 나머지는 늦춘다.
 
 ### 번들이 큰 게 왜 문제인가
 
 같은 1MB JS를 고성능 데스크톱에서 파싱/실행하면 ~100ms, 저사양 모바일에서는 ~1000ms+. **gzip은 전송 크기만 줄이지 실행 크기는 그대로.**
+
+> gzip과 brotli는 네트워크 전송 시 파일을 압축하는 알고리즘이다. 브라우저가 받은 후 자동으로 압축을 해제한다.
 
 ```bash
 # 번들 분석
@@ -313,7 +343,7 @@ async function handleExport() {
 
 ---
 
-## 105. 이미지 최적화와 Lazy Loading
+## 73. 이미지 최적화와 Lazy Loading
 
 > **핵심 요약** — 이미지는 LCP 후보이자 CLS 원인. 적절한 크기/포맷/우선순위/공간 예약을 함께 설계한다. Lazy loading은 fold 아래에만 — LCP 이미지에 걸면 악화.
 
@@ -321,7 +351,7 @@ async function handleExport() {
 
 | 항목 | 방법 |
 |---|---|
-| 포맷 | WebP/AVIF 사용 |
+| 포맷 | WebP/**AVIF(AV1 Image File Format, AV1 이미지 형식)** 사용 |
 | 크기 | `srcset`/`sizes`로 기기별 분기 |
 | 우선순위 | LCP 이미지에 `fetchpriority="high"` |
 | 공간 예약 | `width`/`height` 또는 `aspect-ratio` |
@@ -349,7 +379,7 @@ async function handleExport() {
 | 유용 | 해로움 |
 |---|---|
 | fold 아래 이미지 | LCP 이미지 (hero image) |
-| 늦게 열리는 모달 내부 | 첫 화면 CTA 이미지 |
+| 늦게 열리는 모달 내부 | 첫 화면 **CTA(Call to Action, 행동 유도 요소 — 클릭을 유도하는 버튼이나 이미지)** 이미지 |
 | 긴 페이지 하단 | 초기 상호작용에 필요한 코드 |
 
 ### 실무 에피소드 — 이런 상황에서 만난다
@@ -363,7 +393,7 @@ async function handleExport() {
 
 ---
 
-## 106. 렌더 차단 리소스와 메인 스레드 점유
+## 74. 렌더 차단 리소스와 메인 스레드 점유
 
 > **핵심 요약** — CSS는 렌더를 차단하고 동기 스크립트는 파싱을 차단한다. `defer`/`async`와 Critical CSS로 첫 화면을 앞당기고, Long Task는 쪼개거나 Web Worker로 오프로드한다.
 
@@ -374,6 +404,26 @@ async function handleExport() {
 | (없음) | 즉시 | 즉시 | O | O |
 | `async` | 병렬 | 다운로드 완료 시 | X | 실행 중만 |
 | `defer` | 병렬 | DOMContentLoaded 전 | O | X |
+
+> DOMContentLoaded는 HTML 파싱이 끝났을 때 발생하는 브라우저 이벤트다(이미지/스타일시트 로딩 완료와는 별개).
+
+### script 로딩 전략 비교
+
+```
+<script> (기본):
+  HTML ──[파싱]──┤정지├──[JS 다운로드]──[JS 실행]──┤재개├──[파싱]──
+                 ↑ HTML 파싱이 멈춤!
+
+<script async>:
+  HTML ──[파싱]──────────[파싱]──┤정지├──[JS 실행]──┤재개├──[파싱]──
+              [JS 다운로드 병렬]──┘
+              ↑ 다운로드 후 즉시 실행 (순서 보장 안 됨)
+
+<script defer>:
+  HTML ──[파싱]──────────────────────[파싱 완료]──[JS 실행]──
+              [JS 다운로드 병렬]──────────────────┘
+              ↑ 파싱 끝난 후 순서대로 실행
+```
 
 ### Critical CSS
 
@@ -418,7 +468,7 @@ async function processInChunks(items) {
 
 ---
 
-## 107. 긴 리스트, Observer API, 무거운 UI 전략
+## 75. 긴 리스트, Observer API, 무거운 UI 전략
 
 > **핵심 요약** — 긴 리스트는 virtualization으로 보이는 영역만 렌더. IntersectionObserver/ResizeObserver는 scroll/resize 이벤트보다 성능이 좋다. 무거운 UI는 상태 범위 축소 + lazy load가 핵심.
 
@@ -471,7 +521,7 @@ useEffect(() => {
 
 ---
 
-## 108. 체감 성능과 Fallback UI
+## 76. 체감 성능과 Fallback UI
 
 > **핵심 요약** — 같은 대기 시간이라도 skeleton, optimistic UI, pending 상태가 있으면 덜 답답하다. 숫자 최적화와 UX 피드백을 함께 설계해야 한다. 300ms 이내 응답이면 로딩 표시를 생략하는 것도 방법.
 
