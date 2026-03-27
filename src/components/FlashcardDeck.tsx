@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter, type Highlighter } from "shiki";
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
@@ -259,40 +259,43 @@ export default function FlashcardDeck({
 
       {/* ── Bottom chapter navigation ── */}
       <div
-        className="flex shrink-0 items-center justify-between border-t border-zinc-200 bg-white/95 px-4 py-2 backdrop-blur dark:border-zinc-700 dark:bg-zinc-800/95"
+        className="flex shrink-0 items-center border-t border-zinc-200 bg-white/95 px-2 py-2 backdrop-blur dark:border-zinc-700 dark:bg-zinc-800/95"
         style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
       >
-        {prevChapter ? (
-          <Link
-            href={`/cards/${prevChapter.slug}`}
-            className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          >
-            <ChevronLeft className="size-4" />
-            <span className="max-w-[120px] truncate">{prevChapter.title}</span>
-          </Link>
-        ) : (
-          <div />
-        )}
+        {/* Prev chapter */}
+        <div className="flex min-w-0 flex-1 justify-start">
+          {prevChapter ? (
+            <Link
+              href={`/cards/${prevChapter.slug}`}
+              className="flex min-w-0 items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            >
+              <ChevronLeft className="size-4 shrink-0" />
+              <span className="truncate">{prevChapter.title}</span>
+            </Link>
+          ) : null}
+        </div>
 
+        {/* Home */}
         <Link
-          href="/books"
-          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+          href="/cards"
+          className="flex shrink-0 items-center rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+          aria-label="카드 목록으로"
         >
-          <BookOpen className="size-4" />
-          <span>ebook</span>
+          <Home className="size-5" />
         </Link>
 
-        {nextChapter ? (
-          <Link
-            href={`/cards/${nextChapter.slug}`}
-            className="flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
-          >
-            <span className="max-w-[120px] truncate">{nextChapter.title}</span>
-            <ChevronRight className="size-4" />
-          </Link>
-        ) : (
-          <div />
-        )}
+        {/* Next chapter */}
+        <div className="flex min-w-0 flex-1 justify-end">
+          {nextChapter ? (
+            <Link
+              href={`/cards/${nextChapter.slug}`}
+              className="flex min-w-0 items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            >
+              <span className="truncate">{nextChapter.title}</span>
+              <ChevronRight className="size-4 shrink-0" />
+            </Link>
+          ) : null}
+        </div>
       </div>
     </div>
   );

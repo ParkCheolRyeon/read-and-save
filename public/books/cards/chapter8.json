@@ -1,0 +1,42 @@
+[
+  {
+    "question": "67. 측정부터 시작한다 — Core Web Vitals",
+    "answer": "성능 최적화는 감이 아니라 **측정부터** 시작해야 합니다. **Core Web Vitals**는 사용자의 \"느리다\"를 세 가지 숫자로 분해하는데, **LCP**(2.5초 이하)는 주요 콘텐츠가 보이는 속도, **INP**(200ms 이하)는 클릭이나 입력에 대한 반응성, **CLS**(0.1 이하)는 레이아웃이 갑자기 밀리지 않는 안정성을 측정합니다. 실무에서는 **필드 데이터**(CrUX, web-vitals)로 실제 사용자 환경의 문제를 발견하고, **실험실 데이터**(Lighthouse, DevTools)로 원인을 디버깅하는 식으로 두 가지를 함께 봐야 합니다. 측정 → 분해 → 개선 → 재측정, 이 순서를 지켜야 엉뚱한 곳에 시간을 낭비하지 않습니다.\n\n```ts\n페이지 로드 시간 →\n│\n│  [요청]─[TTFB]─[첫 번째 바이트]─[HTML 파싱]─[리소스 로딩]─[렌더링]\n│                                                │\n│         ┌── LCP (Largest Contentful Paint) ────┘\n│         │   \"주요 콘텐츠가 보이는 시점\" (2.5초 이내 = 좋음)\n│         │\n│  ──────────── 페이지 사용 중 ─────────────────────────→\n│         │         │              │\n│         │    ┌── INP ──┐    ┌── INP ──┐\n│         │    │클릭/입력 │    │클릭/입력 │\n│         │    │→ 반응    │    │→ 반응    │\n│         │    └─────────┘    └─────────┘\n│         │    \"상호작용 반응성\" (200ms 이내 = 좋음)\n│         │\n│    ─── CLS 누적 ──────────────────────────────→\n│         레이아웃이 갑자기 밀리는 정도 (0.1 이내 = 좋음)\n```\n\n---\n\n**⚠️ 자주 하는 오해**\n\n- 번들부터 줄이면 된다 → **측정 없이 시작하면 병목을 놓친다.**\n- Lighthouse 점수만 오르면 성공이다 → **실제 사용자 체감(필드 데이터)과 다를 수 있다.**\n- FID가 아직 핵심이다 → **2024년 3월부터 INP가 FID를 대체했다.**\n\n**🔍 실습 질문**\n\nLighthouse 점수가 높은데 실사용자가 느리다고 느낀다면 다음으로 확인할 것은?"
+  },
+  {
+    "question": "68. LCP — 주요 콘텐츠 표시 속도",
+    "answer": "**LCP**는 뷰포트에서 가장 큰 콘텐츠가 렌더링 완료되는 시점으로, 사용자가 \"페이지가 떴다\"고 느끼는 순간과 가장 잘 맞는 지표입니다. LCP가 느려지는 원인은 하나가 아니라 **TTFB**(서버 응답 지연), **리소스 발견 시점**, **다운로드 우선순위**, **렌더 차단 CSS/JS**가 복합적으로 작용합니다. 특히 주의할 점은 LCP 이미지에 `loading=\"lazy\"`를 걸면 오히려 악화된다는 것인데, 대신 `fetchpriority=\"high\"`나 `<link rel=\"preload\">`로 우선 로딩해야 합니다.\n\n```html\n<!-- 나쁜 예: LCP 이미지에 lazy loading -->\n<img src=\"/hero.jpg\" loading=\"lazy\" alt=\"hero\" />\n\n<!-- 좋은 예: LCP 이미지에 높은 우선순위 -->\n<img src=\"/hero.jpg\" fetchpriority=\"high\" alt=\"hero\" />\n<link rel=\"preload\" as=\"image\" href=\"/hero.jpg\" />\n```\n\n**🔍 실습 질문**\n\nLCP 요소가 뭔지 어떻게 찾나?"
+  },
+  {
+    "question": "69. INP — 상호작용 반응성",
+    "answer": "**INP**는 FID와 달리 페이지 전체 수명 동안 발생하는 모든 상호작용을 관찰해서, 가장 긴 지연(이상치 일부 제외)을 **75th percentile** 기준으로 측정합니다. 핵심 원인은 **Long Task**(50ms 이상의 긴 JS 작업)와 **메인 스레드 점유**인데, 이를 개선하려면 긴 작업을 `setTimeout`이나 `scheduler.yield()`로 쪼개거나, `startTransition`으로 urgent/non-urgent 업데이트를 분리하고, 무거운 계산은 **Web Worker**로 오프로드하는 것이 효과적입니다.\n\n```tsx\n// 나쁜 예: 클릭 핸들러에서 무거운 동기 작업\nfunction handleClick() {\n  const filtered = hugeList.filter(complexFilter).sort(complexSort);\n  setItems(filtered);\n}\n\n// 개선: useTransition으로 분리\nfunction SearchResults({ query }) {\n  const [isPending, startTransition] = useTransition();\n  const [results, setResults] = useState([]);\n\n  function handleSearch(newQuery) {\n    startTransition(() => {\n      const filtered = heavyFilter(data, newQuery);\n      setResults(filtered);\n    });\n  }\n\n  return isPending ? <Spinner /> : <List data={results} />;\n}\n```\n\n**🔍 실습 질문**\n\nINP가 나빠지는 가장 흔한 원인은?"
+  },
+  {
+    "question": "70. CLS — 시각적 안정성",
+    "answer": "**CLS**는 예기치 않은 레이아웃 이동이 얼마나 누적됐는지를 나타내는 점수입니다. 대표적인 개선 방법은 이미지에 `width`/`height`를 명시해서 공간을 미리 확보하고, 광고나 배너 슬롯에 `min-height`를 설정하며, 웹폰트에 `font-display: swap`이나 `optional`을 적용하는 것입니다. 참고로 사용자 입력 후 500ms 이내의 레이아웃 이동은 CLS에서 제외되고, skeleton UI도 실제 콘텐츠와 크기가 일치해야 의미가 있습니다.\n\n```html\n<!-- 나쁜 예 -->\n<img src=\"/banner.jpg\" alt=\"banner\" />\n\n<!-- 좋은 예: 공간 예약 -->\n<img src=\"/banner.jpg\" alt=\"banner\" width=\"800\" height=\"400\" />\n\n<!-- 반응형 대응 -->\n<style>.banner { width: 100%; aspect-ratio: 2/1; object-fit: cover; }</style>\n```\n\n**🔍 실습 질문**\n\n이미지에 width/height를 안 주면 CLS가 발생하는 이유는?"
+  },
+  {
+    "question": "71. 브라우저 렌더링 파이프라인 — Reflow, Repaint, Composite",
+    "answer": "브라우저는 **Layout(Reflow) → Paint → Composite** 순으로 화면을 그리는데, 이 중 **Reflow**가 가장 비쌉니다. `width`, `height`, `margin` 같은 기하학적 속성이 바뀌면 하위 요소까지 연쇄적으로 레이아웃을 다시 계산하기 때문입니다. 반면 `transform`과 `opacity`는 **Composite** 단계에서만 처리되어 Reflow를 완전히 건너뛰므로 애니메이션에 적합합니다. 또한 DOM 읽기/쓰기를 번갈아 하면 **강제 동기 레이아웃**이 발생하니, 읽기를 먼저 일괄 처리하고 쓰기를 나중에 일괄 처리하는 패턴을 사용해야 합니다.\n\n```ts\nHTML → DOM 트리\nCSS → **CSSOM(CSS Object Model, CSS 객체 모델 — 브라우저가 CSS를 파싱하여 만드는 트리 구조)** 트리\nDOM + CSSOM → 렌더 트리\n  → Layout (Reflow): 위치/크기 계산 — 비쌈!\n    → Paint: 픽셀 채우기\n      → Composite: GPU 레이어 합성 — 가장 저렴\n```\n\n**🔍 실습 질문**\n\nlayout을 유발하는 CSS 속성 vs composite만 사용하는 속성의 차이는?"
+  },
+  {
+    "question": "72. 번들 크기와 코드 스플리팅",
+    "answer": "**번들 크기**는 단순히 다운로드 시간뿐 아니라 브라우저의 파싱/실행 비용에도 직접 영향을 줍니다. 특히 저사양 모바일에서는 같은 1MB JS라도 실행에 1초 이상 걸릴 수 있고, **gzip은 전송 크기만 줄이지 실행 크기는 그대로**라는 점을 기억해야 합니다. 실무에서는 번들 분석 도구로 병목을 먼저 찾고, **라우트/컴포넌트/기능 단위로 코드 스플리팅**해서 초기에 필요한 코드만 먼저 보냅니다. 무거운 라이브러리는 가벼운 대안으로 교체하거나 `dynamic import`로 지연 로딩하는 것이 효과적입니다.\n\n```bash\n# 번들 분석\nnpx webpack-bundle-analyzer stats.json  # webpack\nANALYZE=true next build                   # Next.js\nnpx vite-bundle-visualizer                # Vite\n```\n\n**🔍 실습 질문**\n\n번들 분석기에서 lodash가 70KB를 차지한다면 어떻게 줄이나?"
+  },
+  {
+    "question": "73. 이미지 최적화와 Lazy Loading",
+    "answer": "이미지는 **LCP 후보**이면서 동시에 **CLS 원인**이 될 수 있어서, 크기/포맷/우선순위/공간 예약을 함께 설계해야 합니다. `srcset`/`sizes`로 기기별 반응형 이미지를 제공하고, **WebP/AVIF** 같은 최신 포맷으로 용량을 줄이며, `width`/`height`로 공간을 미리 예약합니다. 핵심 포인트는 LCP 이미지에는 `fetchpriority=\"high\"`를 설정하고, `loading=\"lazy\"`는 **fold 아래 이미지에만** 적용해야 한다는 것입니다. 모든 이미지에 일괄로 lazy를 걸면 오히려 LCP가 악화됩니다.\n\n```html\n<!-- 반응형 + modern format -->\n<picture>\n  <source srcset=\"/hero.avif\" type=\"image/avif\" />\n  <source srcset=\"/hero.webp\" type=\"image/webp\" />\n  <img src=\"/hero.jpg\" alt=\"hero\" width=\"1200\" height=\"600\" fetchpriority=\"high\" />\n</picture>\n\n<!-- fold 아래 이미지만 lazy -->\n<img src=\"/review.jpg\" loading=\"lazy\" alt=\"review\" width=\"400\" height=\"300\" />\n```\n\n**🔍 실습 질문**\n\nLCP 이미지에 loading='lazy'를 붙이면 어떻게 되나?"
+  },
+  {
+    "question": "74. 렌더 차단 리소스와 메인 스레드 점유",
+    "answer": "**CSS는 렌더를 차단**하고 **동기 스크립트는 HTML 파싱을 차단**해서, 둘 다 첫 화면 표시를 늦추는 주범입니다. 이를 해결하려면 스크립트에 `defer`를 붙여 파싱과 병렬로 다운로드하되 파싱 완료 후 순서대로 실행하게 하고, 첫 화면에 필요한 **Critical CSS만 인라인**한 뒤 나머지는 비동기로 로드합니다. 또한 메인 스레드를 50ms 이상 점유하는 **Long Task**는 INP를 악화시키므로, `scheduler.yield()`로 메인 스레드에 양보하거나 **Web Worker**로 무거운 계산을 오프로드해야 합니다.\n\n```ts\n<script> (기본):\n  HTML ──[파싱]──┤정지├──[JS 다운로드]──[JS 실행]──┤재개├──[파싱]──\n                 ↑ HTML 파싱이 멈춤!\n\n<script async>:\n  HTML ──[파싱]──────────[파싱]──┤정지├──[JS 실행]──┤재개├──[파싱]──\n              [JS 다운로드 병렬]──┘\n              ↑ 다운로드 후 즉시 실행 (순서 보장 안 됨)\n\n<script defer>:\n  HTML ──[파싱]──────────────────────[파싱 완료]──[JS 실행]──\n              [JS 다운로드 병렬]──────────────────┘\n              ↑ 파싱 끝난 후 순서대로 실행\n```\n\n**🔍 실습 질문**\n\n동기 <script>가 HTML 파싱을 막는 이유는?"
+  },
+  {
+    "question": "75. 긴 리스트, Observer API, 무거운 UI 전략",
+    "answer": "수백 개 이상의 긴 리스트는 `react-window` 같은 **virtualization** 라이브러리로 화면에 보이는 영역만 DOM에 렌더해야 합니다. 뷰포트 진입 감지는 **IntersectionObserver**로 무한 스크롤과 lazy loading을, 요소 크기 변화 감지는 **ResizeObserver**로 반응형 컴포넌트를 구현합니다. 이 Observer API들은 scroll/resize 이벤트와 달리 초당 수십~수백 회 실행되지 않고 필요할 때만 콜백이 호출되며, `getBoundingClientRect()` 없이도 동작해서 **강제 reflow를 발생시키지 않아** 성능이 훨씬 좋습니다.\n\n```tsx\n// 10,000개 중 화면에 보이는 ~15개만 DOM에 존재\nimport { FixedSizeList } from \"react-window\";\n\n<FixedSizeList height={600} itemCount={items.length} itemSize={40} width=\"100%\">\n  {({ index, style }) => <div style={style}>{items[index].name}</div>}\n</FixedSizeList>\n```\n\n**🔍 실습 질문**\n\n10,000개 아이템 리스트를 가상화 없이 렌더하면 어떤 문제가 생기나?"
+  },
+  {
+    "question": "76. 체감 성능과 Fallback UI",
+    "answer": "같은 대기 시간이라도 **skeleton UI**, **optimistic update**, **pending 상태** 같은 즉각적 피드백이 있으면 사용자는 훨씬 덜 답답하게 느낍니다. 실무 팁으로, 300ms 이내에 응답이 오면 로딩 표시를 아예 생략하는 것이 더 자연스럽고, 그 이상이면 skeleton이나 pending 상태를 보여주는 것이 좋습니다. 결국 **숫자 최적화**(LCP, INP 줄이기)와 **UX 피드백**(skeleton, optimistic update)을 함께 설계해야 진짜 체감 성능이 좋아집니다.\n\n```tsx\n// Optimistic Update: 서버 응답 전 UI 먼저 반영\nasync function handleLike() {\n  setIsLiked(true);        // 즉시 UI 반영\n  setCount((c) => c + 1);\n  try {\n    await api.likePost(postId);\n  } catch {\n    setIsLiked(false);     // 실패 시 롤백\n    setCount((c) => c - 1);\n  }\n}\n```\n\n---\n\n**⚠️ 자주 하는 오해**\n\n- spinner만 있으면 체감이 좋다 → **오래 도는 spinner는 오히려 불안감을 준다.**\n- skeleton이 있으면 LCP도 좋아진다 → **체감은 개선하지만 LCP 지표는 실제 콘텐츠가 나타나야 개선.**\n- 숫자 최적화만 하면 UX도 좋아진다 → **피드백 없는 빠른 응답보다 피드백 있는 적당한 응답이 더 좋게 느껴질 수 있다.**\n\n**🔍 실습 질문**\n\n네트워크가 느린 환경에서 3초 로딩 동안 빈 화면 vs skeleton — 사용자 체감 차이는?"
+  }
+]

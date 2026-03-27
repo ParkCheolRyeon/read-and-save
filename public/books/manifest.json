@@ -163,5 +163,10 @@
     "id": "project-custom-20",
     "filename": "project-custom-20.mdx",
     "title": "프로젝트 맞춤 20문항"
+  },
+  {
+    "id": "interview-personal-20",
+    "filename": "interview-personal-20.mdx",
+    "title": "이력서/포트폴리오 기반 면접 30문항"
   }
 ]

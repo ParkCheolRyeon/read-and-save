@@ -77,10 +77,7 @@ function extractChapterAnswer(rawAnswer: string): string {
     if (found) return found;
   }
 
-  // Fallback: truncate to reasonable length
-  if (rawAnswer.length > 600) {
-    return rawAnswer.slice(0, 600) + "\n\n...";
-  }
+  // Fallback: return full answer
   return rawAnswer;
 }
 
@@ -156,11 +153,8 @@ function extractFiber(doc: BookDocument): Flashcard[] {
 
   const keyQuestions = doc.meta.keyQuestions;
   if (keyQuestions && keyQuestions.length > 0) {
-    const bodyPreview =
-      doc.body.length > 500 ? doc.body.slice(0, 500) + "..." : doc.body;
-
     for (const kq of keyQuestions) {
-      cards.push({ id: cards.length, question: kq, answer: bodyPreview });
+      cards.push({ id: cards.length, question: kq, answer: doc.body });
     }
   }
 
@@ -227,12 +221,10 @@ async function fetchCardOverrides(slug: string): Promise<Flashcard[] | null> {
 export async function extractCards(slug: string, doc: BookDocument): Promise<Flashcard[]> {
   const format = detectFormat(slug);
 
-  // Only try JSON overrides for formats that have them (qa20 files)
-  if (format === "qa20") {
-    const overrides = await fetchCardOverrides(slug);
-    if (overrides && overrides.length > 0) {
-      return overrides;
-    }
+  // Try JSON overrides for any format
+  const overrides = await fetchCardOverrides(slug);
+  if (overrides && overrides.length > 0) {
+    return overrides;
   }
 
   switch (format) {
